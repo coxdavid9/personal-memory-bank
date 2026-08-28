@@ -6,8 +6,10 @@ const app = express();
 const port = process.env.PORT || 10000;
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 const hasEmailReminders = Boolean(process.env.RESEND_API_KEY && process.env.REMINDER_EMAIL);
+const hasNtfyReminders = Boolean(process.env.NTFY_TOPIC);
 const appUrl = process.env.APP_URL || 'https://personal-memory-bank.onrender.com';
 const reminderFrom = process.env.REMINDER_FROM || 'Personal Memory Bank <onboarding@resend.dev>';
+const ntfyTopic = process.env.NTFY_TOPIC;
 const pool = hasDatabase
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -50,10 +52,10 @@ function emailHtml(memory) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#39;');
-  const safeType = String(memory.type || 'Work').replace(/[&<>"']/g, '');
-  const safePriority = String(memory.priority || 'Normal').replace(/[&<>"']/g, '');
+  const safeType = String(memory.type || 'Work').replace(/[&<>\"']/g, '');
+  const safePriority = String(memory.priority || 'Normal').replace(/[&<>\"']/g, '');
   const due = new Date(memory.due).toLocaleString('en-US', {
     dateStyle: 'full',
     timeStyle: 'short',
@@ -100,6 +102,46 @@ async function scheduleReminderEmail(memory) {
   return { id: data.id || null };
 }
 
+async function scheduleReminderNtfy(memory) {
+  if (!hasNtfyReminders || !memory.due || memory.done) return false;
+  const due = new Date(memory.due);
+  const now = Date.now();
+  const min = now + 10 * 1000;
+  const max = now + 3 * 24 * 60 * 60 * 1000;
+  if (Number.isNaN(due.getTime()) || due.getTime() < min || due.getTime() > max) return false;
+
+  const sequenceId = String(memory.id);
+  const response = await fetch(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}/${encodeURIComponent(sequenceId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'At': String(Math.floor(due.getTime() / 1000)),
+      'Title': `Memory Bank reminder: ${memory.text.slice(0, 70)}`,
+      'Priority': memory.priority === 'High' ? '4' : memory.priority === 'Low' ? '2' : '3',
+      'Tags': 'brain',
+      'Click': appUrl,
+    },
+    body: memory.text,
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(detail || `Unable to schedule phone reminder (${response.status}).`);
+  }
+  return true;
+}
+
+async function cancelReminderNtfy(memoryId) {
+  if (!hasNtfyReminders || !memoryId) return;
+  const response = await fetch(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}/${encodeURIComponent(String(memoryId))}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => '');
+    console.error('Unable to cancel phone reminder:', detail || response.statusText);
+  }
+}
+
 async function cancelReminderEmail(emailId) {
   if (!hasEmailReminders || !emailId) return;
   const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}/cancel`, {
@@ -113,7 +155,7 @@ async function cancelReminderEmail(emailId) {
 }
 
 app.get('/api/status', (req, res) => {
-  res.json({ persistentStorage: hasDatabase, emailReminders: hasEmailReminders });
+  res.json({ persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders });
 });
 
 app.get('/api/memories', async (req, res) => {
@@ -145,23 +187,40 @@ app.post('/api/memories', async (req, res) => {
 
     const saved = rows[0];
     let reminderScheduled = false;
+    let reminderChannels = [];
     let reminderError = null;
 
-    if (saved.due && hasEmailReminders) {
-      try {
-        const scheduled = await scheduleReminderEmail(saved);
-        if (scheduled.id) {
-          saved.reminder_email_id = scheduled.id;
-          reminderScheduled = true;
-          await pool.query('UPDATE memories SET reminder_email_id=$1 WHERE id=$2', [scheduled.id, saved.id]);
+    if (saved.due) {
+      if (hasEmailReminders) {
+        try {
+          const scheduled = await scheduleReminderEmail(saved);
+          if (scheduled.id) {
+            saved.reminder_email_id = scheduled.id;
+            reminderScheduled = true;
+            reminderChannels.push('email');
+            await pool.query('UPDATE memories SET reminder_email_id=$1 WHERE id=$2', [scheduled.id, saved.id]);
+          }
+        } catch (err) {
+          reminderError = err.message;
+          console.error('Reminder email scheduling failed:', err);
         }
-      } catch (err) {
-        reminderError = err.message;
-        console.error('Reminder scheduling failed:', err);
+      }
+
+      if (hasNtfyReminders) {
+        try {
+          const scheduled = await scheduleReminderNtfy(saved);
+          if (scheduled) {
+            reminderScheduled = true;
+            reminderChannels.push('phone');
+          }
+        } catch (err) {
+          reminderError = reminderError || err.message;
+          console.error('Phone reminder scheduling failed:', err);
+        }
       }
     }
 
-    res.status(201).json({ ...saved, reminderScheduled, reminderError });
+    res.status(201).json({ ...saved, reminderScheduled, reminderChannels, reminderError });
   } catch (err) {
     console.error(err);
     res.status(400).json({ error: 'Unable to save memory.' });
@@ -180,7 +239,10 @@ app.patch('/api/memories/:id', async (req, res) => {
     if (!current) return res.status(404).json({ error: 'Memory not found.' });
 
     const done = Boolean(req.body.done);
-    if (done && current.reminder_email_id) await cancelReminderEmail(current.reminder_email_id);
+    if (done) {
+      if (current.reminder_email_id) await cancelReminderEmail(current.reminder_email_id);
+      await cancelReminderNtfy(current.id);
+    }
 
     let reminderEmailId = done ? null : current.reminder_email_id;
     if (!done && !reminderEmailId && current.due && hasEmailReminders) {
@@ -189,6 +251,15 @@ app.patch('/api/memories/:id', async (req, res) => {
         reminderEmailId = scheduled.id || null;
       } catch (err) {
         console.error('Reminder rescheduling failed:', err);
+      }
+    }
+
+    if (!done && current.due && hasNtfyReminders) {
+      try {
+        await cancelReminderNtfy(current.id);
+        await scheduleReminderNtfy({ ...current, done: false });
+      } catch (err) {
+        console.error('Phone reminder rescheduling failed:', err);
       }
     }
 
@@ -209,6 +280,7 @@ app.delete('/api/memories/:id', async (req, res) => {
     const id = Number(req.params.id);
     const { rows } = await pool.query('SELECT reminder_email_id FROM memories WHERE id=$1', [id]);
     if (rows[0]?.reminder_email_id) await cancelReminderEmail(rows[0].reminder_email_id);
+    await cancelReminderNtfy(id);
     await pool.query('DELETE FROM memories WHERE id=$1', [id]);
     res.status(204).end();
   } catch (err) {
@@ -224,7 +296,7 @@ app.use((req, res) => {
 
 initDb()
   .then(() => {
-    app.listen(port, () => console.log(`Memory Bank running on ${port}; persistent storage: ${hasDatabase}; email reminders: ${hasEmailReminders}`));
+    app.listen(port, () => console.log(`Memory Bank running on ${port}; persistent storage: ${hasDatabase}; email reminders: ${hasEmailReminders}; phone reminders: ${hasNtfyReminders}`));
   })
   .catch((err) => {
     console.error('Database initialization failed:', err);
