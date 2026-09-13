@@ -2,109 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Personal Memory Bank</title>
+<title>David's Personal Agent</title>
 <style>
-body{font-family:Arial,sans-serif;max-width:1050px;margin:0 auto;padding:28px;background:#f7f8fa;color:#20242a}h1{margin:0 0 6px}.sub{color:#667085;margin-top:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px;box-shadow:0 2px 8px #00000008}textarea,input,select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #d0d5dd;border-radius:9px;margin:6px 0 12px;font:inherit}textarea{min-height:120px;resize:vertical}button{border:0;border-radius:9px;padding:10px 14px;font-weight:600;cursor:pointer;background:#111827;color:#fff}.secondary{background:#eef2f6;color:#20242a}.entry{border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}.meta{font-size:12px;color:#667085;margin-bottom:6px}.tag{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2ff;margin-right:5px;font-size:11px}.overdue{border-left:4px solid #d92d20}.today{border-left:4px solid #f79009}.soon{border-left:4px solid #f79009}.ok{border-left:4px solid #12b76a}.actions{display:flex;gap:8px;flex-wrap:wrap}.small{font-size:13px;color:#667085}.status{padding:9px 12px;border-radius:9px;margin:14px 0;font-size:13px}.status.local{background:#fff4e5;color:#8a4b08}.status.persistent{background:#ecfdf3;color:#067647}.status.email{background:#eef4ff;color:#175cd3;margin-top:-6px}.status.phone{background:#ecfdf3;color:#067647;margin-top:-6px}.empty{color:#667085}.archive{margin-top:18px}.attention-group{margin:0 0 14px}.attention-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#667085;margin:12px 0 6px}.attention-title:first-child{margin-top:0}.attention-entry{margin:7px 0}.attention-entry b{display:block;margin-bottom:4px}.due-label{font-weight:600}.reminder-note{margin-top:4px;font-size:12px;color:#667085}.reminder-badge{display:inline-block;margin-top:6px;padding:3px 7px;border-radius:999px;background:#ecfdf3;color:#067647;font-size:11px;font-weight:600}@media(max-width:750px){.grid{grid-template-columns:1fr}}
+*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:0;background:#f5f7fb;color:#172033}main{max-width:1100px;margin:0 auto;padding:22px}.top{display:flex;align-items:center;gap:14px;margin-bottom:18px}.orb{width:48px;height:48px;border-radius:15px;background:#172033;color:#fff;display:grid;place-items:center;font-size:24px}.top h1{margin:0;font-size:25px}.top p{margin:3px 0 0;color:#667085}.grid{display:grid;grid-template-columns:1.35fr .65fr;gap:16px}.card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:18px;box-shadow:0 3px 12px #10182808}.chat{min-height:530px;display:flex;flex-direction:column}.messages{flex:1;overflow:auto;padding:5px 2px}.bubble{max-width:88%;padding:11px 13px;border-radius:14px;margin:9px 0;white-space:pre-wrap;line-height:1.45}.user{margin-left:auto;background:#172033;color:#fff;border-bottom-right-radius:5px}.assistant{background:#f2f4f7;border-bottom-left-radius:5px}.composer{display:flex;gap:8px;margin-top:12px}.composer input{flex:1}.input,select,button{font:inherit}.input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px}.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;background:#172033;color:#fff}.btn.secondary{background:#eef2f6;color:#172033}.side h2,.chat h2{margin:0 0 8px}.muted{color:#667085;font-size:13px}.cap{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin:9px 0}.cap strong{display:block}.badge{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:99px;background:#ecfdf3;color:#067647;font-size:11px}.status{padding:9px 11px;border-radius:10px;background:#f2f4f7;font-size:12px;margin-bottom:10px}.status.good{background:#ecfdf3;color:#067647}.memory{border:1px solid #e4e7ec;border-radius:10px;padding:10px;margin:7px 0}.memory small{color:#667085}.quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.quick button{font-size:12px;padding:8px 10px}.section{margin-top:16px}@media(max-width:800px){main{padding:14px}.grid{grid-template-columns:1fr}.chat{min-height:520px}.top h1{font-size:22px}}
 </style>
 </head>
 <body>
-<h1>🧠 Personal Memory Bank</h1>
-<p class="sub">Capture it once. Turn it into a reminder, plan, or searchable note.</p>
-<div id="storageStatus"></div>
-<div id="emailStatus"></div>
-<div id="phoneStatus"></div>
+<main>
+<header class="top"><div class="orb">🧠</div><div><h1>David's Personal Agent</h1><p>Knows what matters. Helps move it forward.</p></div></header>
+<div id="status"></div>
 <div class="grid">
-<section class="card"><h2>Quick Capture</h2>
-<label>What do you want me to remember?</label>
-<textarea id="text" placeholder="Example: Ask about the monthly inventory report process."></textarea>
-<label>Type</label><select id="type"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select>
-<label>When should it come back?</label><input id="due" type="datetime-local">
-<label>Priority</label><select id="priority"><option>Normal</option><option>High</option><option>Low</option></select>
-<div class="actions"><button onclick="saveEntry()">Save to Memory Bank</button><button class="secondary" onclick="clearForm()">Clear</button></div>
-<p class="small">Phone reminders use ntfy and can be delivered up to 3 days ahead. Email reminders can cover longer dates when enabled.</p>
-</section>
-<section class="card"><h2>What needs attention?</h2><div id="attention"></div></section>
-</div>
-<section class="card archive"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin-right:auto">My Memories</h2><input id="search" style="max-width:280px;margin:0" placeholder="Search memories..." oninput="render()"><select id="filter" style="max-width:160px;margin:0" onchange="render()"><option>All</option><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select></div><div id="list"></div></section>
+<section class="card chat"><h2>Talk to your agent</h2><div class="muted">This is the beginning of the agent layer. Memory, projects and capabilities are kept separate so new tools can be added later.</div><div id="messages" class="messages"></div><div class="quick"><button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button><button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button><button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button></div><div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div></section>
+<aside class="side">
+<section class="card"><h2>Capabilities</h2><div id="caps" class="muted">Loading...</div></section>
+<section class="card section"><h2>Projects</h2><div id="projects" class="muted">Loading...</div></section>
+<section class="card section"><h2>Memory</h2><div class="muted">Capture something you want me to remember.</div><textarea id="memoryText" class="input" style="margin-top:9px;min-height:85px" placeholder="Example: Follow up with the recruiter Friday."></textarea><div style="display:flex;gap:7px;margin-top:7px"><select id="memoryType" class="input"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select><button class="btn" onclick="saveMemory()">Remember</button></div></section>
+</aside></div>
+</main>
 <script>
-const KEY='personalMemoryBank.v1';
-let entries=JSON.parse(localStorage.getItem(KEY)||'[]');
-let persistent=false;
-let emailReminders=false;
-let ntfyReminders=false;
-
-function localSave(){localStorage.setItem(KEY,JSON.stringify(entries))}
-function normalize(e){return {id:e.id,text:e.text,type:e.type||'Work',due:e.due||null,priority:e.priority||'Normal',done:Boolean(e.done),created:e.created||new Date().toISOString(),reminder_email_id:e.reminder_email_id||null}}
-async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Request failed');return r.status===204?null:r.json()}
-async function load(){
-  try{
-    const s=await api('/api/status'); persistent=s.persistentStorage; emailReminders=Boolean(s.emailReminders); ntfyReminders=Boolean(s.ntfyReminders);
-    if(persistent){
-      const data=await api('/api/memories');
-      if(data.memories.length===0 && entries.length){
-        for(const e of entries){
-          const migrated={...e,due:e.due?new Date(e.due).toISOString():null};
-          await api('/api/memories',{method:'POST',body:JSON.stringify(migrated)})
-        }
-        localStorage.removeItem(KEY); entries=[];
-        const migrated=await api('/api/memories'); entries=migrated.memories.map(normalize);
-      }else entries=data.memories.map(normalize);
-    }
-  }catch(e){persistent=false;emailReminders=false;ntfyReminders=false}
-  updateStorageStatus();render();
-}
-function updateStorageStatus(){
-  document.getElementById('storageStatus').innerHTML=persistent?'<div class="status persistent">✓ Persistent storage connected — your memories are saved on the server.</div>':'<div class="status local">Local browser storage is active until the database is connected. Your current memories stay in this browser.</div>';
-  document.getElementById('emailStatus').innerHTML=emailReminders?'<div class="status email">✓ Email reminders are enabled — reminders will be sent at the date/time you choose when within the email scheduling window.</div>':'';
-  document.getElementById('phoneStatus').innerHTML=ntfyReminders?'<div class="status phone">✓ Phone reminders are enabled — ntfy will notify your phone at the reminder time for dates within 3 days.</div>':'<div class="status local">Phone reminders are not connected yet.</div>';
-}
-async function saveEntry(){
-  const text=document.getElementById('text').value.trim();if(!text)return alert('Add something to remember first.');
-  const dueInput=document.getElementById('due').value;
-  const entry={text,type:document.getElementById('type').value,due:dueInput?new Date(dueInput).toISOString():null,priority:document.getElementById('priority').value,done:false,created:new Date().toISOString()};
-  try{
-    if(persistent){
-      const saved=await api('/api/memories',{method:'POST',body:JSON.stringify(entry)});
-      entries.unshift(normalize(saved));
-      if(saved.reminderScheduled) alert('Saved. Your '+saved.reminderChannels.join(' and ')+' reminder is scheduled.');
-      else if(saved.reminderError) alert('Saved, but the reminder could not be scheduled: '+saved.reminderError);
-      else if(entry.due && (emailReminders||ntfyReminders)) alert('Saved. The selected date is outside the current phone/email scheduling window or has already passed.');
-    }else{entries.unshift(normalize({...entry,id:Date.now()}));localSave()}
-    clearForm();render();
-  }catch(e){alert(e.message)}
-}
-function clearForm(){document.getElementById('text').value='';document.getElementById('due').value='';document.getElementById('priority').value='Normal'}
-async function removeEntry(id){try{if(persistent)await api('/api/memories/'+id,{method:'DELETE'});entries=entries.filter(x=>String(x.id)!==String(id));if(!persistent)localSave();render()}catch(e){alert(e.message)}}
-async function toggleDone(id){const e=entries.find(x=>String(x.id)===String(id));if(!e)return;const wasDone=e.done;e.done=!e.done;try{if(persistent){const saved=await api('/api/memories/'+id,{method:'PATCH',body:JSON.stringify({done:e.done})});Object.assign(e,normalize(saved));}else localSave();render()}catch(err){e.done=wasDone;alert(err.message)}}
-function fmt(d){if(!d)return 'No reminder set';const x=new Date(d);return x.toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}
-function dueState(d){
-  if(!d)return 'none';
-  const due=new Date(d), now=new Date();
-  if(due.getTime()<now.getTime())return 'overdue';
-  if(due.toDateString()===now.toDateString())return 'today';
-  if(due.getTime()-now.getTime()<=7*86400000)return 'soon';
-  return 'future';
-}
-function attentionMarkup(){
-  const active=entries.filter(e=>!e.done&&e.due).sort((a,b)=>new Date(a.due)-new Date(b.due));
-  const overdue=active.filter(e=>dueState(e.due)==='overdue').slice(0,5);
-  const today=active.filter(e=>dueState(e.due)==='today').slice(0,5);
-  const soon=active.filter(e=>dueState(e.due)==='soon').slice(0,5);
-  const groups=[];
-  const group=(title,items,cls)=>items.length?`<div class="attention-group"><div class="attention-title">${title}</div>${items.map(e=>`<div class="entry attention-entry ${cls}"><b>${esc(e.text)}</b><div class="meta">${esc(e.type)} · <span class="due-label">${fmt(e.due)}</span></div>${e.reminder_email_id?'<span class="reminder-badge">Email reminder scheduled</span>':''}<div class="reminder-note">This memory is being surfaced because its reminder date has arrived.</div></div>`).join('')}</div>`:'';
-  groups.push(group('Overdue',overdue,'overdue'));
-  groups.push(group('Due today',today,'today'));
-  groups.push(group('Coming up',soon,'soon'));
-  return groups.join('')||'<p class="empty">You’re clear for the next 7 days.</p>';
-}
-function render(){
- const q=(document.getElementById('search').value||'').toLowerCase(),f=document.getElementById('filter').value;
- let filtered=entries.filter(e=>(f==='All'||e.type===f)&&(!q||e.text.toLowerCase().includes(q)||e.type.toLowerCase().includes(q)));filtered.sort((a,b)=>(a.done-b.done)||((a.due?new Date(a.due).getTime():Infinity)-(b.due?new Date(b.due).getTime():Infinity)));
- document.getElementById('list').innerHTML=filtered.length?filtered.map(e=>{const state=dueState(e.due);return `<div class="entry ${!e.done&&state==='overdue'?'overdue':!e.done&&state==='today'?'today':!e.done&&state==='soon'?'soon':e.done?'ok':''}"><div class="meta"><span class="tag">${esc(e.type)}</span><span class="tag">${esc(e.priority)}</span> ${fmt(e.due)} ${e.done?' · Done':''}</div><div>${esc(e.text)}</div>${e.reminder_email_id&&!e.done?'<span class="reminder-badge">Email reminder scheduled</span>':''}<div class="actions" style="margin-top:9px"><button class="secondary" onclick="toggleDone('${e.id}')">${e.done?'Reopen':'Mark done'}</button><button class="secondary" onclick="removeEntry('${e.id}')">Delete</button></div></div>`}).join(''):'<p class="empty">Nothing here yet. Capture the first thing you don’t want to forget.</p>';
- document.getElementById('attention').innerHTML=attentionMarkup();
-}
+let messages=[];
+async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function renderMessages(){const el=document.getElementById('messages');el.innerHTML=messages.length?messages.map(m=>`<div class="bubble ${m.role==='user'?'user':'assistant'}">${esc(m.content)}</div>`).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';el.scrollTop=el.scrollHeight}
+async function load(){
+ try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`;
+ const ctx=await api('/api/agent/context');document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
+ const history=await api('/api/agent/messages');messages=history.messages||[];renderMessages();
+ }catch(e){document.getElementById('status').innerHTML=`<div class="status">${esc(e.message)}</div>`}
+}
+async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages();try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply});renderMessages()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages()}}
+function quick(text){document.getElementById('message').value=text;send()}
+async function saveMemory(){const input=document.getElementById('memoryText'),text=input.value.trim();if(!text)return;try{await api('/api/memories',{method:'POST',body:JSON.stringify({text,type:document.getElementById('memoryType').value,priority:'Normal',done:false})});input.value='';alert('Remembered.');}catch(e){alert(e.message)}}
 load();
-setInterval(()=>{load()},60000);
 </script>
 </body></html>
