@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "David's Personal Agent",
+    "slug": "davids-personal-agent",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.coxdavid.personalagent",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCalendarsFullAccessUsageDescription": "David's Personal Agent uses Calendar access to help plan and manage personal work with your permission.",
+        "NSRemindersFullAccessUsageDescription": "David's Personal Agent uses Reminders access to help remember important tasks with your permission."
+      }
+    },
+    "android": {"package": "com.coxdavid.personalagent"},
+    "plugins": []
+  }
+}
