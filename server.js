@@ -334,7 +334,7 @@ app.get('/api/calendar.ics', (req, res) => {
   res.setHeader('Content-Type','text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition','inline; filename="personal-agent-event.ics"');
   res.setHeader('Cache-Control','no-store');
-  res.send(lines.join('\\r\\n')+'\\r\\n');
+  res.send(lines.join('\r\n')+'\r\n');
 });
 
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
