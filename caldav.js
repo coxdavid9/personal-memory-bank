@@ -26,7 +26,7 @@ const responses = xml => {
     if (close < 0) break;
 
     const head = text.slice(open + 1, close).trim();
-    const localName = head.replace(/^\\/?(?:[^:>]+:)?/, '').split(/\\s/)[0].toLowerCase();
+    const localName = head.replace(/^\/?(?:[^:>]+:)?/, '').split(/\s/)[0].toLowerCase();
 
     if (localName === 'response' && !head.startsWith('/')) {
       const endTag = text.toLowerCase().indexOf('</' + (head.includes(':') ? head.split(':')[0] + ':' : '') + 'response>', close + 1);
@@ -86,7 +86,7 @@ function buildVEvent({ title, start, end, notes, location, allDay, uid }) {
   if (notes) lines.push(`DESCRIPTION:${esc(notes)}`);
   if (location) lines.push(`LOCATION:${esc(location)}`);
 
-  return lines.concat(['END:VEVENT', 'END:VCALENDAR']).join('\\r\\n') + '\\r\\n';
+  return lines.concat(['END:VEVENT', 'END:VCALENDAR']).join('\r\n') + '\r\n';
 }
 
 class CalDAVClient {
