@@ -314,6 +314,23 @@ async function runAgent(message) {
   throw new Error('The agent reached its tool-call limit before completing the request.');
 }
 
+app.get('/api/calendar.ics', (req, res) => {
+  const title = String(req.query.title || 'Calendar event').slice(0, 200);
+  const start = new Date(String(req.query.start || ''));
+  const end = new Date(String(req.query.end || ''));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() <= start.getTime()) return res.status(400).type('text').send('Invalid calendar event.');
+  const esc = value => String(value || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const dt = value => { const d = new Date(value); const pad = n => String(n).padStart(2, '0'); return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+pad(d.getUTCMinutes())+pad(d.getUTCSeconds())+'Z'; };
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//David Personal Agent//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT','UID:'+Date.now()+'@personal-memory-bank','DTSTAMP:'+dt(new Date()),'DTSTART:'+dt(start),'DTEND:'+dt(end),'SUMMARY:'+esc(title)];
+  if (req.query.notes) lines.push('DESCRIPTION:'+esc(String(req.query.notes).slice(0, 4000)));
+  if (req.query.location) lines.push('LOCATION:'+esc(String(req.query.location).slice(0, 500)));
+  lines.push('END:VEVENT','END:VCALENDAR');
+  res.setHeader('Content-Type','text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition','inline; filename="personal-agent-event.ics"');
+  res.setHeader('Cache-Control','no-store');
+  res.send(lines.join('\\r\\n')+'\\r\\n');
+});
+
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
