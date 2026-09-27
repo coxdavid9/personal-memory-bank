@@ -128,9 +128,11 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY,
       role TEXT NOT NULL CHECK (role IN ('user','assistant')),
       content TEXT NOT NULL,
+      actions JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE agent_messages ADD COLUMN IF NOT EXISTS actions JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await pool.query(`CREATE INDEX IF NOT EXISTS agent_messages_created_idx ON agent_messages(created_at DESC)`);
 
   const projects = [
@@ -343,7 +345,7 @@ app.get('/api/agent/context', async (req, res) => {
 
 app.get('/api/agent/messages', async (req, res) => {
   if (!pool) return res.json({ messages: [] });
-  try { const { rows } = await pool.query(`SELECT id, role, content, created_at AS created FROM agent_messages ORDER BY created_at ASC LIMIT 100`); res.json({ messages: rows }); }
+  try { const { rows } = await pool.query(`SELECT id, role, content, actions, created_at AS created FROM agent_messages ORDER BY created_at ASC LIMIT 100`); res.json({ messages: rows }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
 });
 
@@ -354,7 +356,7 @@ app.post('/api/agent/chat', async (req, res) => {
     const result = await runAgent(message);
     if (pool) {
       await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message]);
-      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['assistant', result.text]);
+      await pool.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)', ['assistant', result.text, JSON.stringify(result.actions || [])]);
     }
     res.json({ reply: result.text, actions: result.actions || [] });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message || 'Unable to run agent.' }); }
