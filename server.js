@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { Pool } = require('pg');
+const { buildAgentTools, executeAgentTool } = require('./agent-tools');
 
 const app = express();
 const port = process.env.PORT || 10000;
@@ -161,6 +162,10 @@ Architecture rules:
 - ClearCFO project knowledge can live in memory, but customer financial data must remain in ClearCFO's own backend/database and should only be accessed through an explicit, controlled integration.
 - Job search is a capability. Use saved preferences and application history when evaluating jobs; never pretend a job is new if the data does not establish that.
 - Calendar is permissioned device data and should only be used when the user grants access.
+- You have tools. Use them when an action is appropriate instead of merely telling David how to do it.
+- When David explicitly asks you to remember something, actually call save_memory.
+- When David asks for a reminder, use save_memory with a due time when one is clear.
+- After using a tool, tell David what you actually did. Never claim an action happened unless the tool succeeded.
 - Never expose secrets, API keys, database credentials, or internal configuration.
 
 Current projects:
@@ -182,12 +187,67 @@ async function runAgent(message) {
     ...recent.map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: message },
   ];
-  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: openAIModel, input }) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || 'The AI agent request failed.');
-  const text = data.output_text || (data.output || []).flatMap(item => item.content || []).map(part => part.text || '').join('').trim();
-  if (!text) throw new Error('The AI agent returned no text.');
-  return text;
+
+  const tools = buildAgentTools();
+  let responseInput = input;
+
+  for (let turn = 0; turn < 4; turn += 1) {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: openAIModel,
+        input: responseInput,
+        tools,
+        tool_choice: 'auto',
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || 'The AI agent request failed.');
+
+    const toolCalls = (data.output || []).filter(item => item.type === 'function_call');
+    if (!toolCalls.length) {
+      const text = data.output_text || (data.output || [])
+        .flatMap(item => item.content || [])
+        .map(part => part.text || '')
+        .join('')
+        .trim();
+      if (!text) throw new Error('The AI agent returned no text.');
+      return text;
+    }
+
+    responseInput = [
+      ...responseInput,
+      ...(data.output || []),
+    ];
+
+    for (const call of toolCalls) {
+      let args = {};
+      try { args = JSON.parse(call.arguments || '{}'); }
+      catch { args = {}; }
+
+      const result = await executeAgentTool(call.name, args, {
+        pool,
+        hasEmailReminders,
+        hasNtfyReminders,
+        scheduleReminderEmail,
+        scheduleReminderNtfy,
+        getAgentContext,
+      });
+
+      responseInput.push({
+        type: 'function_call_output',
+        call_id: call.call_id,
+        output: JSON.stringify(result),
+      });
+    }
+  }
+
+  throw new Error('The agent reached its tool-call limit before completing the request.');
 }
 
 app.get('/api/status', (req, res) => res.json({ persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), model: openAIModel }));
