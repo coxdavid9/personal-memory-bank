@@ -21,7 +21,8 @@
 <div class="grid">
 <section class="card chat"><h2>Talk to your agent</h2><div class="muted">This is the beginning of the agent layer. Memory, projects and capabilities are kept separate so new tools can be added later.</div><div id="messages" class="messages"></div><div class="quick"><button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button><button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button><button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button></div><div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div></section>
 <aside class="side">
-<section class="card"><h2>Capabilities</h2><div id="caps" class="muted">Loading...</div></section>
+<section class="card"><h2>Portfolio</h2><div id="portfolio" class="muted">Loading...</div></section>
+<section class="card section"><h2>Capabilities</h2><div id="caps" class="muted">Loading...</div></section>
 <section class="card section"><h2>Projects</h2><div id="projects" class="muted">Loading...</div></section>
 <section class="card section"><h2>Memory</h2><div class="muted">Capture something you want me to remember.</div><textarea id="memoryText" class="input" style="margin-top:9px;min-height:85px" placeholder="Example: Follow up with the recruiter Friday."></textarea><div style="display:flex;gap:7px;margin-top:7px"><select id="memoryType" class="input"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select><button class="btn" onclick="saveMemory()">Remember</button></div></section>
 </aside></div>
@@ -37,9 +38,18 @@ function calendarActionHtml(action){if(!action||action.type!=='calendar.create_e
 function icsEscape(value){return String(value||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n')}
 function icsDate(iso){const d=new Date(iso);const pad=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`}
 function addToCalendar(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});window.location.href='/api/calendar.ics?'+params.toString()}
+function money(v){return Number(v||0).toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0})}
+function renderPortfolio(p){
+  const el=document.getElementById('portfolio');
+  if(!p||!p.holdings||!p.holdings.length){el.innerHTML='<div class="muted">No holdings yet — tell me your positions.</div>';return}
+  const day=p.dayChange==null?'':`<span class="${p.dayChange>=0?'':'muted'}">${p.dayChange>=0?'+':''}${money(p.dayChange)}${p.dayChangePct==null?'':' ('+p.dayChangePct.toFixed(1)+'%)'}</span>`;
+  const accounts=p.accounts.map(a=>`<div class="memory"><strong>${esc(a.account)}</strong><br><span class="muted">${money(a.value)} · ${a.allocationPct.toFixed(1)}%</span></div>`).join('');
+  const holdings=p.holdings.map(h=>`<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+money(h.price)+' · ':''}${money(h.value)} · ${esc(h.source)}</span></div>`).join('');
+  el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
+}
 async function load(){
  try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`;
- const ctx=await api('/api/agent/context');document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
+ const portfolio=await api('/api/portfolio');renderPortfolio(portfolio);const ctx=await api('/api/agent/context');document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
  const history=await api('/api/agent/messages');messages=history.messages||[];renderMessages();
  }catch(e){document.getElementById('status').innerHTML=`<div class="status">${esc(e.message)}</div>`}
 }
