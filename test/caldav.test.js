@@ -13,11 +13,12 @@ test('builds a parseable timed VEVENT with UTC timestamps and escaped text', () 
     allDay: false,
   });
   assert.match(ics, /UID:test-uid@personal-agent/);
+  assert.ok(ics.includes('\r\n'));
   assert.match(ics, /DTSTART:20260928T140000Z/);
   assert.match(ics, /DTEND:20260928T150000Z/);
-  assert.match(ics, /SUMMARY:Work\, on Personal Agent/);
-  assert.match(ics, /DESCRIPTION:Line one\\nLine two\; keep this/);
-  assert.match(ics, /LOCATION:Home\, office/);
+  assert.ok(ics.includes('SUMMARY:Work\\, on Personal Agent'));
+  assert.ok(ics.includes('DESCRIPTION:Line one\\nLine two\\; keep this'));
+  assert.ok(ics.includes('LOCATION:Home\\, office'));
 });
 
 test('builds an all-day VEVENT with an exclusive DTEND date', () => {
