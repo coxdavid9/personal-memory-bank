@@ -9,7 +9,7 @@ The mobile app is the private client. The Render service is the agent backend. P
 - Memory: persistent personal context and reminders.
 - ClearCFO: project context in the personal agent; customer financial data stays in ClearCFO and will be accessed through a controlled API integration.
 - Job Search: remembered job-search preferences and, in the next integration step, live job research plus application-history filtering.
-- Calendar: permissioned iPhone Calendar/Reminders access is planned as a native capability.
+- Calendar: permissioned iPhone Calendar access is implemented as a native capability. The backend can queue a calendar event action; the iPhone app requests permission and creates the event on-device. Reminders access remains available for a future native reminder capability.
 
 ## Security boundary
 
