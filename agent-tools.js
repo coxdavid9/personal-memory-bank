@@ -29,6 +29,32 @@ const contextTool = {
   }
 };
 
+const portfolioSummaryTool = {
+  type: 'function',
+  name: 'get_portfolio_summary',
+  description: 'Report David\'s current investment portfolio from manual holdings and later Plaid-synced holdings. Use this for questions about total value, accounts, holdings, allocation, or how the portfolio is doing. Do not give buy/sell recommendations.',
+  strict: true,
+  parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
+};
+
+const recordHoldingTool = {
+  type: 'function',
+  name: 'record_holding',
+  description: 'Record or update a manual investment holding. Use when David gives you a current account balance or ticker/share count. Manual holdings are never overwritten by Plaid sync.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      account: { type: 'string', description: 'Account name, such as 401k or Fidelity.' },
+      ticker: { type: ['string','null'], description: 'Ticker symbol, or null for a balance-only account.' },
+      shares: { type: ['number','null'], description: 'Number of shares, or null for balance-only holdings.' },
+      balance: { type: ['number','null'], description: 'Manual dollar balance, or null for share-based holdings.' }
+    },
+    required: ['account','ticker','shares','balance'],
+    additionalProperties: false
+  }
+};
+
 const calendarEventTool = {
   type: 'function',
   name: 'create_calendar_event',
@@ -50,10 +76,13 @@ const calendarEventTool = {
 };
 
 function buildAgentTools() {
-  return [memoryTool, contextTool, calendarEventTool];
+  return [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool];
 }
 
 async function executeAgentTool(name, args, deps) {
+  if (name === 'record_holding') return deps.recordHolding(deps.pool, args);
+  if (name === 'get_portfolio_summary') return { ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) };
+
   if (name === 'save_memory') {
     if (!deps.pool) return { ok: false, error: 'Persistent memory is not configured.' };
     const memory = {
