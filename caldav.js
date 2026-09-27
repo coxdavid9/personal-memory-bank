@@ -13,8 +13,33 @@ const tag = (xml, name) => {
   return m ? decode(m[1].trim()) : null;
 };
 
-const responses = xml =>
-  String(xml).match(/<(?:[^>]*:)?response\\b[^>]*>[\\s\\S]*?<\\/(?:[^>]*:)?response>/gi) || [];
+const responses = xml => {
+  const text = String(xml);
+  const out = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = text.indexOf('<', cursor);
+    if (open < 0) break;
+
+    const close = text.indexOf('>', open + 1);
+    if (close < 0) break;
+
+    const head = text.slice(open + 1, close).trim();
+    const localName = head.replace(/^\\/?(?:[^:>]+:)?/, '').split(/\\s/)[0].toLowerCase();
+
+    if (localName === 'response' && !head.startsWith('/')) {
+      const endTag = text.toLowerCase().indexOf('</' + (head.includes(':') ? head.split(':')[0] + ':' : '') + 'response>', close + 1);
+      if (endTag < 0) break;
+      out.push(text.slice(open, endTag + (head.includes(':') ? head.split(':')[0].length + 11 : 11)));
+      cursor = endTag + (head.includes(':') ? head.split(':')[0].length + 11 : 11);
+    } else {
+      cursor = close + 1;
+    }
+  }
+
+  return out;
+};
 
 const urlFor = (base, href) => new URL(decode(href), base).toString();
 
