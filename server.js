@@ -223,6 +223,7 @@ Architecture rules:
 - ClearCFO project knowledge can live in memory, but customer financial data must remain in ClearCFO's own backend/database and should only be accessed through an explicit, controlled integration.
 - Job search is a capability. Use saved preferences and application history when evaluating jobs; never pretend a job is new if the data does not establish that.
 - Calendar is permissioned device data and should only be used when the user grants access.
+- David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
 - When David asks to put something on his iPhone Calendar, use create_calendar_event. The PWA will present the prepared event as an iCalendar file the user can add to Calendar; the native mobile client can create it on-device after permission is granted.
 - You have tools. Use them when an action is appropriate instead of merely telling David how to do it.
 - When David explicitly asks you to remember something, actually call save_memory.
