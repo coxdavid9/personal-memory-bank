@@ -16,7 +16,7 @@
 </head>
 <body>
 <main>
-<header class="top"><div class="orb">🧠</div><div><h1>David's Personal Agent</h1><p>Knows what matters. Helps move it forward.</p></div></header>
+<header class="top"><div class="orb">🧠</div><div style="flex:1"><h1>David's Personal Agent</h1><p>Knows what matters. Helps move it forward.</p></div><button class="btn secondary" onclick="logout()">Sign out</button></header>
 <div id="status"></div>
 <div class="grid">
 <section class="card chat"><h2>Talk to your agent</h2><div class="muted">This is the beginning of the agent layer. Memory, projects and capabilities are kept separate so new tools can be added later.</div><div id="messages" class="messages"></div><div class="quick"><button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button><button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button><button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button></div><div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div></section>
@@ -37,6 +37,7 @@ async function load(){
  const history=await api('/api/agent/messages');messages=history.messages||[];renderMessages();
  }catch(e){document.getElementById('status').innerHTML=`<div class="status">${esc(e.message)}</div>`}
 }
+async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
 async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages();try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply});renderMessages()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages()}}
 function quick(text){document.getElementById('message').value=text;send()}
 async function saveMemory(){const input=document.getElementById('memoryText'),text=input.value.trim();if(!text)return;try{await api('/api/memories',{method:'POST',body:JSON.stringify({text,type:document.getElementById('memoryType').value,priority:'Normal',done:false})});input.value='';alert('Remembered.');}catch(e){alert(e.message)}}
