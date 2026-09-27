@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool } = require('./agent-tools');
@@ -14,12 +15,72 @@ const reminderFrom = process.env.REMINDER_FROM || 'Personal Memory Bank <onboard
 const ntfyTopic = process.env.NTFY_TOPIC;
 const openAIModel = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
 const clearCfoApiUrl = process.env.CLEARCFO_API_URL || '';
+const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
+const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
+
+function signSession(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', authSecret).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function validSession(token) {
+  if (!authSecret || !token) return false;
+  const [body, sig] = String(token).split('.');
+  if (!body || !sig) return false;
+  const expected = crypto.createHmac('sha256', authSecret).update(body).digest('base64url');
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    return payload.exp > Date.now();
+  } catch { return false; }
+}
+
+function isAuthenticated(req) {
+  return validSession(req.headers.cookie?.match(/(?:^|;\\s*)pa_session=([^;]+)/)?.[1]);
+}
+
+function authPage(message = '') {
+  const safe = String(message).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#172033"><title>Personal Agent — Sign in</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;margin:0;min-height:100vh;display:grid;place-items:center;color:#172033}.card{width:min(90%,380px);background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:28px;box-shadow:0 8px 30px #10182812}h1{margin:0 0 8px}.muted{color:#667085;font-size:14px;margin-bottom:20px}input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #d0d5dd;border-radius:10px;font:inherit;margin-bottom:10px}button{width:100%;padding:13px;border:0;border-radius:10px;background:#172033;color:#fff;font-weight:700;font:inherit}.error{color:#b42318;background:#fef3f2;padding:9px;border-radius:9px;margin-bottom:12px;font-size:13px}</style></head><body><main class="card"><h1>🧠 Personal Agent</h1><div class="muted">Private access</div>${safe?`<div class="error">${safe}</div>`:''}<form method="POST" action="/login"><input name="password" type="password" autocomplete="current-password" placeholder="Password" autofocus required><button>Sign in</button></form></main></body></html>`;
+}
+
+function requireAuth(req, res, next) {
+  if (isAuthenticated(req)) return next();
+  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
+  return res.redirect('/login');
+}
 const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
 
 app.use(express.json({ limit: '200kb' }));
+app.use(express.urlencoded({ extended: false }));
+app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/login', (req, res) => res.type('html').send(authPage()));
+app.post('/login', (req, res) => {
+  if (!authPassword || !authSecret) return res.status(503).type('html').send(authPage('Private authentication is not configured yet.'));
+  const password = String(req.body.password || '');
+  const a = Buffer.from(password);
+  const b = Buffer.from(authPassword);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).type('html').send(authPage('Incorrect password.'));
+  const token = signSession({ exp: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+  res.setHeader('Set-Cookie', `pa_session=${token}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`);
+  res.redirect('/');
+});
+app.post('/api/auth/login', (req, res) => {
+  if (!authPassword || !authSecret) return res.status(503).json({ error: 'Private authentication is not configured yet.' });
+  const password = String(req.body.password || '');
+  const a = Buffer.from(password), b = Buffer.from(authPassword);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Incorrect password.' });
+  const token = signSession({ exp: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+  res.setHeader('Set-Cookie', `pa_session=${token}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`);
+  res.json({ ok: true });
+});
+app.post('/api/auth/logout', (req, res) => { res.setHeader('Set-Cookie', 'pa_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'); res.json({ ok: true }); });
 
 async function initDb() {
   if (!pool) return;
@@ -253,7 +314,7 @@ async function runAgent(message) {
   throw new Error('The agent reached its tool-call limit before completing the request.');
 }
 
-app.get('/api/status', (req, res) => res.json({ persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), model: openAIModel }));
+app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
