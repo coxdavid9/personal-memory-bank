@@ -32,7 +32,7 @@ const contextTool = {
 const calendarEventTool = {
   type: 'function',
   name: 'create_calendar_event',
-  description: 'Prepare a calendar event for David\'s permissioned iPhone Calendar. Use this when David asks to put something on his calendar, schedule an event, block time, or add a calendar reminder. The iPhone client will ask for Calendar permission and create the event on-device. Use ISO 8601 timestamps with an explicit timezone offset.',
+  description: 'Prepare a calendar event for David. Use this when David asks to put something on his calendar, schedule an event, block time, or add a calendar reminder. The PWA will present an Add to iPhone Calendar action; the native iPhone client can create it on-device. Use ISO 8601 timestamps with an explicit timezone offset.',
   strict: true,
   parameters: {
     type: 'object',
@@ -118,7 +118,7 @@ async function executeAgentTool(name, args, deps) {
     };
     if (!action.title) return { ok: false, error: 'Calendar event title is required.' };
     if (deps.onAction) deps.onAction(action);
-    return { ok: true, queuedForDevice: true, action };
+    return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
   }
 
   if (name === 'get_personal_context') {
