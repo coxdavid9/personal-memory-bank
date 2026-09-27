@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool } = require('./agent-tools');
+const { buildCalDAVClientFromEnv } = require('./caldav');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -17,6 +18,7 @@ const openAIModel = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
 const clearCfoApiUrl = process.env.CLEARCFO_API_URL || '';
 const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
 const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
+const caldav = buildCalDAVClientFromEnv();
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -224,7 +226,7 @@ Architecture rules:
 - Job search is a capability. Use saved preferences and application history when evaluating jobs; never pretend a job is new if the data does not establish that.
 - Calendar is permissioned device data and should only be used when the user grants access.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
-- When David asks to put something on his iPhone Calendar, use create_calendar_event. The PWA will present the prepared event as an iCalendar file the user can add to Calendar; the native mobile client can create it on-device after permission is granted.
+- When David asks to put something on his iPhone Calendar, use create_calendar_event. The server writes to the dedicated Agent calendar through CalDAV when configured; otherwise the PWA presents the existing iCalendar handoff. Never write to David's personal calendars.
 - You have tools. Use them when an action is appropriate instead of merely telling David how to do it.
 - When David explicitly asks you to remember something, actually call save_memory.
 - When David asks for a reminder, use save_memory with a due time when one is clear.
@@ -301,6 +303,7 @@ async function runAgent(message) {
         scheduleReminderEmail,
         scheduleReminderNtfy,
         getAgentContext,
+        caldav,
         onAction: (action) => actions.push(action),
       });
 
@@ -332,7 +335,7 @@ app.get('/api/calendar.ics', (req, res) => {
   res.send(lines.join('\\r\\n')+'\\r\\n');
 });
 
-app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), model: openAIModel }));
+app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
@@ -408,4 +411,7 @@ app.delete('/api/memories/:id', async (req, res) => {
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-initDb().then(() => app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}`))).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
+initDb().then(async () => {
+  if (caldav) await caldav.discover();
+  app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}; CalDAV:${Boolean(caldav)}`));
+}).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });

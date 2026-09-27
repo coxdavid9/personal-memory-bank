@@ -117,6 +117,15 @@ async function executeAgentTool(name, args, deps) {
       allDay: Boolean(args.allDay)
     };
     if (!action.title) return { ok: false, error: 'Calendar event title is required.' };
+    if (deps.caldav?.isConfigured()) {
+      try {
+        await deps.caldav.createCalDAVEvent(action);
+        if (deps.onAction) deps.onAction(action);
+        return { ok: true, delivery: 'caldav', action };
+      } catch (err) {
+        console.error('CalDAV calendar write failed; falling back to PWA handoff:', err.message);
+      }
+    }
     if (deps.onAction) deps.onAction(action);
     return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
   }
