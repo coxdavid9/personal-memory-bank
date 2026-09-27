@@ -1,0 +1,12 @@
+{
+  "name": "David's Personal Agent",
+  "short_name": "Personal Agent",
+  "description": "David's private personal AI agent.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#172033",
+  "icons": [
+    {"src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}
