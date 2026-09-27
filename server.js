@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool } = require('./agent-tools');
 
 const app = express();
-const port = process.env.PORT || 10000;
+const port = Number(process.env.PORT) || 10000;
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 const hasEmailReminders = Boolean(process.env.RESEND_API_KEY && process.env.REMINDER_EMAIL);
 const hasNtfyReminders = Boolean(process.env.NTFY_TOPIC);
@@ -326,4 +326,4 @@ app.delete('/api/memories/:id', async (req, res) => {
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-initDb().then(() => app.listen(port, () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}`))).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
+initDb().then(() => app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}`))).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
