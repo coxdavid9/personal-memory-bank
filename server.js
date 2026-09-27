@@ -85,7 +85,7 @@ async function initDb() {
     ['memory', 'Memory', 'Remember important information and bring it back at the right time.'],
     ['clearcfo', 'ClearCFO', 'Work with ClearCFO project context and, when configured, query the ClearCFO backend for current data.'],
     ['job-search', 'Job Search', 'Search and evaluate accounting/finance jobs using David’s saved preferences and application history.'],
-    ['calendar', 'iPhone Calendar', 'Planned capability for permissioned iPhone Calendar and Reminder access.'],
+    ['calendar', 'iPhone Calendar', 'Permissioned iPhone Calendar access through the native mobile app. The agent can prepare events and the iPhone client creates them on-device after permission is granted.'],
   ];
   for (const [key, name, description] of capabilities) {
     await pool.query(`
@@ -162,6 +162,7 @@ Architecture rules:
 - ClearCFO project knowledge can live in memory, but customer financial data must remain in ClearCFO's own backend/database and should only be accessed through an explicit, controlled integration.
 - Job search is a capability. Use saved preferences and application history when evaluating jobs; never pretend a job is new if the data does not establish that.
 - Calendar is permissioned device data and should only be used when the user grants access.
+- When David asks to put something on his iPhone Calendar, use create_calendar_event. The mobile client will execute the queued calendar action after Calendar permission is granted.
 - You have tools. Use them when an action is appropriate instead of merely telling David how to do it.
 - When David explicitly asks you to remember something, actually call save_memory.
 - When David asks for a reminder, use save_memory with a due time when one is clear.
@@ -179,6 +180,7 @@ ${JSON.stringify(context.memories, null, 2)}`;
 }
 
 async function runAgent(message) {
+  const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext();
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
@@ -217,7 +219,7 @@ async function runAgent(message) {
         .join('')
         .trim();
       if (!text) throw new Error('The AI agent returned no text.');
-      return text;
+      return { text, actions };
     }
 
     responseInput = [
@@ -237,6 +239,7 @@ async function runAgent(message) {
         scheduleReminderEmail,
         scheduleReminderNtfy,
         getAgentContext,
+        onAction: (action) => actions.push(action),
       });
 
       responseInput.push({
@@ -266,12 +269,12 @@ app.post('/api/agent/chat', async (req, res) => {
   const message = String(req.body.message || '').trim().slice(0, 10000);
   if (!message) return res.status(400).json({ error: 'Message is required.' });
   try {
-    const reply = await runAgent(message);
+    const result = await runAgent(message);
     if (pool) {
       await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message]);
-      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['assistant', reply]);
+      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['assistant', result.text]);
     }
-    res.json({ reply });
+    res.json({ reply: result.text, actions: result.actions || [] });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message || 'Unable to run agent.' }); }
 });
 

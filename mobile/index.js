@@ -1,6 +1,8 @@
 import React, {useEffect, useState} from 'react';
 import {SafeAreaView, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator} from 'react-native';
 import {StatusBar} from 'expo-status-bar';
+import * as Calendar from 'expo-calendar/legacy';
+import {Platform} from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://personal-memory-bank.onrender.com';
 
@@ -29,6 +31,53 @@ export default function App() {
     })();
   }, []);
 
+  async function addCalendarEvent(action) {
+    if (!action || action.type !== 'calendar.create_event') return false;
+    const permission = await Calendar.requestCalendarPermissionsAsync();
+    if (permission.status !== 'granted') {
+      setMessages(prev => [...prev, {role:'assistant', content:'I prepared the calendar event, but Calendar permission was not granted on this iPhone.'}]);
+      return false;
+    }
+
+    let calendar;
+    if (Platform.OS === 'ios') {
+      calendar = await Calendar.getDefaultCalendarAsync();
+    } else {
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      calendar = calendars.find(item => item.allowsModifications) || calendars[0];
+    }
+
+    if (!calendar?.id) {
+      setMessages(prev => [...prev, {role:'assistant', content:'I have Calendar access, but I could not find a calendar that can accept new events.'}]);
+      return false;
+    }
+
+    await Calendar.createEventAsync(calendar.id, {
+      title: action.title,
+      startDate: new Date(action.start),
+      endDate: new Date(action.end),
+      notes: action.notes || undefined,
+      location: action.location || undefined,
+      allDay: Boolean(action.allDay),
+      alarms: [{relativeOffset: 0}]
+    });
+
+    const when = new Date(action.start).toLocaleString(undefined, {dateStyle:'medium', timeStyle:'short'});
+    setMessages(prev => [...prev, {role:'assistant', content:`Added “${action.title}” to your iPhone Calendar for ${when}.`}]);
+    return true;
+  }
+
+  async function processActions(actions) {
+    for (const action of actions || []) {
+      if (action.type === 'calendar.create_event') {
+        try { await addCalendarEvent(action); }
+        catch (error) {
+          setMessages(prev => [...prev, {role:'assistant', content:`I couldn't add that to Calendar: ${error.message}`}]);
+        }
+      }
+    }
+  }
+
   async function send(textOverride) {
     const text = (textOverride ?? message).trim();
     if (!text || busy) return;
@@ -38,6 +87,7 @@ export default function App() {
     try {
       const data = await api('/api/agent/chat', {method:'POST', body:JSON.stringify({message:text})});
       setMessages(prev => [...prev, {role:'assistant', content:data.reply}]);
+      await processActions(data.actions);
     } catch (error) {
       setMessages(prev => [...prev, {role:'assistant', content:`I hit an error: ${error.message}`}]);
     } finally { setBusy(false); }

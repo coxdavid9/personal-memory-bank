@@ -10,10 +10,26 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCalendarsFullAccessUsageDescription": "David's Personal Agent uses Calendar access to help plan and manage personal work with your permission.",
-        "NSRemindersFullAccessUsageDescription": "David's Personal Agent uses Reminders access to help remember important tasks with your permission."
+        "NSRemindersFullAccessUsageDescription": "David's Personal Agent uses Reminders access to help remember important tasks with your permission.",
+        "NSCalendarsUsageDescription": "David's Personal Agent uses Calendar access to add events you ask it to schedule.",
+        "NSRemindersUsageDescription": "David's Personal Agent uses Reminders access only when you ask it to create a reminder."
       }
     },
-    "android": {"package": "com.coxdavid.personalagent"},
-    "plugins": []
+    "android": {
+      "package": "com.coxdavid.personalagent",
+      "permissions": [
+        "READ_CALENDAR",
+        "WRITE_CALENDAR"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "David's Personal Agent uses Calendar access to add events you ask it to schedule.",
+          "remindersPermission": "David's Personal Agent uses Reminders access only when you ask it to create a reminder."
+        }
+      ]
+    ]
   }
 }
