@@ -109,6 +109,7 @@ async function executeAgentTool(name, args, deps) {
     }
     const action = {
       type: 'calendar.create_event',
+      delivery: 'pwa_ics_or_native_client',
       title: String(args.title || '').trim().slice(0, 200),
       start: start.toISOString(),
       end: end.toISOString(),
@@ -120,6 +121,7 @@ async function executeAgentTool(name, args, deps) {
     if (deps.caldav?.isConfigured()) {
       try {
         await deps.caldav.createCalDAVEvent(action);
+        action.delivery = 'caldav';
         if (deps.onAction) deps.onAction(action);
         return { ok: true, delivery: 'caldav', action };
       } catch (err) {
