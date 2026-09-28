@@ -371,6 +371,7 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
           preview: call.name === 'github_create_pr' ? {
             title: args.title,
             branch: args.branch,
+            diff: String(args.diff || '').slice(0, 12000),
             files: (args.files || []).map(file => ({ path: file.path, content: file.content }))
           } : null
         });
