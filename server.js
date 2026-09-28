@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
+const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -20,6 +21,7 @@ const clearCfoApiUrl = process.env.CLEARCFO_API_URL || '';
 const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
 const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
+const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -50,7 +52,7 @@ function authPage(message = '') {
 
 function requireAuth(req, res, next) {
   if (isAuthenticated(req)) return next();
-  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
+  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
   return res.redirect('/login');
 }
@@ -136,6 +138,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE agent_messages ADD COLUMN IF NOT EXISTS actions JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await pool.query(`CREATE INDEX IF NOT EXISTS agent_messages_created_idx ON agent_messages(created_at DESC)`);
   await initPortfolioDb(pool);
+  await initPortfolioAgentDb(pool);
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -341,6 +344,27 @@ app.get('/api/calendar.ics', (req, res) => {
   res.setHeader('Content-Disposition','inline; filename="personal-agent-event.ics"');
   res.setHeader('Cache-Control','no-store');
   res.send(lines.join('\r\n')+'\r\n');
+});
+
+app.post('/api/internal/daily-portfolio', async (req, res) => {
+  if (!dailyPortfolioCronSecret) return res.status(503).json({ error: 'Daily portfolio scheduler is not configured.' });
+  const supplied = String(req.get('x-daily-portfolio-secret') || '');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(dailyPortfolioCronSecret);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Unauthorized.' });
+  try {
+    const result = await runDailyPortfolioAgent({ pool, getPortfolioSummary });
+    res.json({
+      ok: true,
+      asOf: result.asOf,
+      decision: result.gate.notify ? 'notify' : 'silent',
+      reason: result.gate.reason,
+      notificationSent: result.notificationSent
+    });
+  } catch (err) {
+    console.error('Daily portfolio agent failed:', err);
+    res.status(500).json({ error: err.message || 'Daily portfolio agent failed.' });
+  }
 });
 
 app.get('/api/portfolio', async (req,res) => {
