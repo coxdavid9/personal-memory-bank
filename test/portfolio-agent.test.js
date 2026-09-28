@@ -85,6 +85,8 @@ test('silent run still records a snapshot and never calls notifier', async () =>
       if (sql.startsWith('DELETE FROM portfolio_snapshots')) return { rows: [] };
       if (sql.startsWith('INSERT INTO portfolio_snapshots')) return { rows: [] };
       if (sql.startsWith('INSERT INTO portfolio_agent_runs')) return { rows: [] };
+      if (sql.startsWith('SELECT skill, description FROM tool_whitelist')) return { rows: [] };
+      if (sql.startsWith('INSERT INTO tool_audit')) return { rows: [] };
       throw new Error('Unexpected SQL: ' + sql);
     }
   };
@@ -131,6 +133,8 @@ test('notifier is called at most once for a material run', async () => {
       if (sql.startsWith('DELETE FROM portfolio_snapshots')) return { rows: [] };
       if (sql.startsWith('INSERT INTO portfolio_snapshots')) return { rows: [] };
       if (sql.startsWith('INSERT INTO portfolio_agent_runs')) return { rows: [] };
+      if (sql.startsWith('SELECT skill, description FROM tool_whitelist')) return { rows: [] };
+      if (sql.startsWith('INSERT INTO tool_audit')) return { rows: [] };
       throw new Error('Unexpected SQL: ' + sql);
     }
   };

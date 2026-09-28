@@ -1,13 +1,15 @@
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const { Pool } = require('pg');
-const { buildAgentTools, executeAgentTool } = require('./agent-tools');
+const { buildAgentTools, executeAgentTool, inferJob } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
+const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -143,6 +145,7 @@ async function initDb() {
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
   await initAgentTeamDb(pool);
+  await initPolicyDb(pool);
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -230,7 +233,16 @@ async function getAgentContext() {
   return { memories: memories.rows, projects: projects.rows, capabilities: capabilities.rows };
 }
 
+function loadAgentOperatingFiles() {
+  const names = ['SOUL.md', 'USER.md', 'AGENTS.md'];
+  return names.map(name => {
+    try { return { name, content: fs.readFileSync(path.join(__dirname, name), 'utf8') }; }
+    catch { return { name, content: '' }; }
+  }).filter(item => item.content);
+}
+
 function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
+  const operatingFiles = loadAgentOperatingFiles();
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
 Architecture rules:
@@ -311,7 +323,8 @@ async function runAgent(message) {
     { role: 'user', content: message },
   ];
 
-  const tools = buildAgentTools();
+  const job = inferJob(message);
+  const tools = buildAgentTools({ job });
   let responseInput = input;
 
   for (let turn = 0; turn < 4; turn += 1) {
@@ -366,6 +379,7 @@ async function runAgent(message) {
         delegateToTeam,
         callSpecialist,
         onAction: (action) => actions.push(action),
+        runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       });
 
       responseInput.push({
@@ -445,6 +459,59 @@ app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(r
 
 app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
+});
+
+app.get('/api/approvals', async (req, res) => {
+  if (!pool) return res.json({ approvals: [] });
+  try {
+    const { rows } = await pool.query(`SELECT id, created_at AS "createdAt", expires_at AS "expiresAt", run_id AS "runId", skill, args, status, decided_at AS "decidedAt", decision FROM tool_approvals WHERE status='pending' ORDER BY created_at ASC`);
+    for (const approval of rows) if (new Date(approval.expiresAt).getTime() <= Date.now()) {
+      await pool.query('UPDATE tool_approvals SET status=\'expired\', decided_at=NOW(), decision=\'timeout\' WHERE id=$1 AND status=\'pending\'', [approval.id]);
+      approval.status = 'expired';
+      approval.decision = 'timeout';
+    }
+    res.json({ approvals: rows.filter(row => row.status === 'pending') });
+  } catch (err) { res.status(500).json({ error: 'Unable to load approvals.' }); }
+});
+
+app.post('/api/approvals/:id/decision', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Persistent storage is not configured yet.' });
+  try {
+    const id = Number(req.params.id);
+    const decision = String(req.body.decision || '').toLowerCase();
+    const current = await getApproval(pool, id);
+    if (!current) return res.status(404).json({ error: 'Approval not found.' });
+    if (decision === 'deny') {
+      const result = await decideApproval(pool, id, 'deny');
+      return res.json(result);
+    }
+    if (decision !== 'approve') return res.status(400).json({ error: 'Decision must be approve or deny.' });
+    const result = await decideApproval(pool, id, 'approve');
+    if (!result.ok) return res.status(409).json(result);
+
+    const actions = [];
+    const execution = await executeAgentTool(current.skill, current.args, {
+      pool,
+      hasEmailReminders,
+      hasNtfyReminders,
+      scheduleReminderEmail,
+      scheduleReminderNtfy,
+      getAgentContext,
+      recordHolding,
+      getPortfolioSummary,
+      caldav,
+      delegateToTeam,
+      callSpecialist,
+      onAction: action => actions.push(action),
+      runId: current.runId,
+      skipPolicy: true
+    });
+    await auditToolCall(pool, { runId: current.runId, skill: current.skill, tier: 'ask', decision: 'approved_execute', args: current.args, durationMs: 0 });
+    res.json({ ok: true, approval: result.approval, execution, actions });
+  } catch (err) {
+    console.error('Approval execution failed:', err);
+    res.status(500).json({ error: err.message || 'Unable to execute approved action.' });
+  }
 });
 
 app.get('/api/agent/messages', async (req, res) => {

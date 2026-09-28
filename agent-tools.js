@@ -1,3 +1,5 @@
+const { executeSkill } = require('./policy');
+
 const memoryTool = {
   type: 'function',
   name: 'save_memory',
@@ -95,20 +97,48 @@ const delegateTeamTool = {
   }
 };
 
-function buildAgentTools() {
-  return [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
+const JOB_SKILLS = Object.freeze({
+  general: ['save_memory','get_personal_context','get_portfolio_summary'],
+  portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding'],
+  calendar: ['save_memory','get_personal_context','create_calendar_event'],
+  engineering: ['save_memory','get_personal_context','delegate_to_team'],
+  business: ['save_memory','get_personal_context','delegate_to_team'],
+  product: ['save_memory','get_personal_context','delegate_to_team']
+});
+
+function inferJob(message = '') {
+  const text = String(message).toLowerCase();
+  if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
+  if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
+  if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
+  if (/customer|revenue|cost|business|sales|operations/.test(text)) return 'business';
+  return 'general';
+}
+
+function buildAgentTools({ job = 'general' } = {}) {
+  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
+  const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
+  return all.filter(tool => allowed.has(tool.name));
 }
 
 async function executeAgentTool(name, args, deps) {
+  const runId = deps.runId || `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  const run = async (skill, fn) => {
+    if (deps.skipPolicy) return fn();
+    const result = await executeSkill(skill, args, { pool: deps.pool, runId, execute: fn });
+    if (result?.approvalRequired && deps.onAction) deps.onAction({ type: 'tool.approval', approvalId: result.approval?.approvalId, skill, args: result.approval?.args || args, expiresAt: result.approval?.expiresAt, tier: result.policy?.tier });
+    return result;
+  };
   if (name === 'delegate_to_team') {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
-    return deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist });
+    return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
   }
 
-  if (name === 'record_holding') return deps.recordHolding(deps.pool, args);
-  if (name === 'get_portfolio_summary') return { ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) };
+  if (name === 'record_holding') return run('record_holding', () => deps.recordHolding(deps.pool, args));
+  if (name === 'get_portfolio_summary') return run('get_portfolio_summary', async () => ({ ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) }));
 
   if (name === 'save_memory') {
+    return run('save_memory', async () => {
     if (!deps.pool) return { ok: false, error: 'Persistent memory is not configured.' };
     const memory = {
       text: String(args.text || '').trim().slice(0, 5000),
@@ -149,10 +179,12 @@ async function executeAgentTool(name, args, deps) {
         }
       }
     }
-    return { ok: true, memory: saved, reminderScheduled, reminderChannels };
+      return { ok: true, memory: saved, reminderScheduled, reminderChannels };
+    });
   }
 
   if (name === 'create_calendar_event') {
+    return run('create_calendar_event', async () => {
     const start = new Date(args.start);
     const end = new Date(args.end);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -183,14 +215,13 @@ async function executeAgentTool(name, args, deps) {
       }
     }
     if (deps.onAction) deps.onAction(action);
-    return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
+      return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
+    });
   }
 
-  if (name === 'get_personal_context') {
-    return { ok: true, context: await deps.getAgentContext() };
-  }
+  if (name === 'get_personal_context') return run('get_personal_context', async () => ({ ok: true, context: await deps.getAgentContext() }));
 
   return { ok: false, error: `Unknown agent tool: ${name}` };
 }
 
-module.exports = { buildAgentTools, executeAgentTool };
+module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool };
