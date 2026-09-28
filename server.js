@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
-const { buildAgentTools, executeAgentTool, inferJob } = require('./agent-tools');
+const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
@@ -13,16 +13,6 @@ const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = r
 const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
-
-const IMAGE_DATA_URL_RE = /^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
-const MAX_IMAGE_DATA_URL_LENGTH = 4_500_000;
-function validateImageDataUrl(value) {
-  if (value == null || value === '') return null;
-  const image = String(value);
-  if (image.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error('Image is too large. Please use an image under about 3.5 MB.');
-  if (!IMAGE_DATA_URL_RE.test(image)) throw new Error('Unsupported image. Please upload a JPEG, PNG, WebP, or GIF image.');
-  return image;
-}
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
