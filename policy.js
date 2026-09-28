@@ -8,7 +8,7 @@ const DEFAULT_POLICIES = Object.freeze({
   create_calendar_event: TIERS.ASK,
   delegate_to_team: TIERS.MONITOR,
   get_job_application_history: TIERS.SAFE,
-  save_job_application: TIERS.MONITOR,
+  save_job_application: TIERS.ASK,
   github_repo_status: TIERS.SAFE,
   github_open_pull_requests: TIERS.SAFE,
   github_pr_status: TIERS.SAFE,
