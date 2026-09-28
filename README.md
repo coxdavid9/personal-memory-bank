@@ -51,6 +51,9 @@ Required for AI:
 Optional ClearCFO integration placeholder:
 - `CLEARCFO_API_URL`
 
+Optional portfolio market-data fallback:
+- `TWELVEDATA_API_KEY` — Twelve Data API key stored in Render only; never commit it to the repo.
+
 Existing reminder variables remain supported:
 - `DATABASE_URL`
 - `RESEND_API_KEY`
