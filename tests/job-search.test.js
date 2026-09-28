@@ -40,6 +40,6 @@ test('ambiguous numbered job lists are not safe to resolve by number', () => {
     '1. Accountant — Onin Technology',
     '2. Senior Accountant — Robert Half'
   ].join('\\n');
-  const numberedLists = response.split(/\\n\\s*\\n/).filter(block => /^\\s*1\\.\\s+/m.test(block));
-  assert.equal(numberedLists.length, 2);
+  const numberedListStarts = response.match(/^\\s*1\\.\\s+/gm) || [];
+  assert.equal(numberedListStarts.length, 2);
 });
