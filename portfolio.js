@@ -91,12 +91,13 @@ async function getPortfolioSummary(pool) {
   const holdings=[];
   let stale=false;
   for (const row of rows) {
-    let price=null, change=null, changePct=null, value=Number(row.balance || 0);
+    let price=null, change=null, changePct=null, quoteError=null, value=Number(row.balance || 0);
     if (row.ticker && row.shares != null) {
       const quote=await getQuote(row.ticker);
       price=quote.price;
       change=quote.change;
       changePct=quote.changePct;
+      quoteError=quote.error || null;
       if (quote.stale) stale=true;
       if (Number.isFinite(Number(price))) {
         value=Number(row.shares)*Number(price);
@@ -121,7 +122,7 @@ async function getPortfolioSummary(pool) {
     holdings.push({
       id:Number(row.id), account:row.account, ticker:row.ticker,
       shares:row.shares==null?null:Number(row.shares), balance:row.balance==null?null:Number(row.balance),
-      price, change, changePct, value, quoteError: row.ticker && row.shares != null ? (price == null ? 'Quote unavailable.' : null) : null,
+      price, change, changePct, value, quoteError,
       source:row.source, updatedAt:row.updated_at
     });
   }
