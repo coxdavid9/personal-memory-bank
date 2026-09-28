@@ -73,6 +73,7 @@ async function delegateToTeam({ pool, roleKey, task, project, context = '', call
   let resultText = '';
   try {
     resultText = await callOpenAI({
+      roleKey: role.key,
       system: role.systemPrompt,
       user: JSON.stringify({
         task: cleanTask,
