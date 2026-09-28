@@ -24,7 +24,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .approval-bar h2{margin:0 0 8px;font-size:15px}.approval-bar .memory{background:#fffaf0}
 .grid{display:block}
 .card{background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:18px;box-shadow:0 5px 18px #1018280a}
-.chat{display:flex;flex-direction:column}
+.chat{display:flex;flex-direction:column;padding-bottom:92px}
 .chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
 .chat h2{margin:0 0 5px}.muted{color:#667085;font-size:13px}
 .messages{padding:8px 2px}
@@ -33,7 +33,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
 .approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}
 .approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
-.composer{display:flex;gap:8px;margin-top:12px}.composer input{flex:1}
+.composer{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(calc(100% - 36px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1}
 .input,select,button{font:inherit}.input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px}
 .btn{border:0;border-radius:11px;padding:10px 14px;font-weight:700;cursor:pointer;background:#172033;color:#fff}.btn.secondary{background:#eef2f6;color:#172033}.btn.small{padding:8px 11px;font-size:12px}
 .quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.quick button{font-size:12px;padding:8px 10px}
@@ -47,7 +47,8 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .section{margin-top:16px}
 @media(max-width:800px){
  main{padding:10px}.top{padding:8px 2px}.top h1{font-size:20px}.top p{font-size:12px}.top .btn{padding:8px 10px}
- .chat{padding:14px}
+ .chat{padding:14px;padding-bottom:92px}
+ .composer{width:calc(100% - 20px);padding-bottom:calc(10px + env(safe-area-inset-bottom))}
  .chat-head{display:block}.chat-head .btn{margin-top:8px}.bubble{max-width:92%}.approval-bar{padding:10px}
 }
 </style>
