@@ -11,6 +11,11 @@ const DEFAULT_POLICIES = Object.freeze({
   github_open_pull_requests: TIERS.SAFE,
   github_pull_request: TIERS.SAFE,
   github_issues: TIERS.SAFE,
+  github_file: TIERS.SAFE,
+  github_create_pr: TIERS.ASK,
+  render_deploy_status: TIERS.SAFE,
+  render_logs: TIERS.SAFE,
+  render_redeploy: TIERS.ASK,
   record_snapshot: TIERS.MONITOR,
   notify: TIERS.MONITOR,
 });
@@ -131,7 +136,7 @@ async function requestApproval(pool, { runId, skill, args, timeoutMs = 120000 })
   const expiresAt = new Date(Date.now() + timeoutMs);
   const { rows } = await pool.query(
     `INSERT INTO tool_approvals(run_id,skill,args,expires_at) VALUES($1,$2,$3,$4) RETURNING id,expires_at AS "expiresAt"`,
-    [runId, skill, JSON.stringify(summarizeArgs(args)), expiresAt]
+    [runId, skill, JSON.stringify(args), expiresAt]
   );
   return { status: 'pending', approvalId: rows[0].id, expiresAt: rows[0].expiresAt };
 }
