@@ -139,10 +139,20 @@ function renderPortfolio(p){
   const holdings=p.holdings.map(h=>{
     const value=Number.isFinite(Number(h.value))?money(h.value):'Value unavailable';
     const price=Number.isFinite(Number(h.price))?money(h.price):'price unavailable';
-    return `<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+price+' · ':''}${value} · ${esc(h.source)}</span></div>`;
+    const remove=h.source==='manual'?'<br><button type="button" class="btn secondary small" style="margin-top:7px" onclick="removeHolding('+Number(h.id)+')">Remove</button>':'';
+    return `<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+price+' · ':''}${value} · ${esc(h.source)}</span>${remove}</div>`;
   }).join('');
   const completeness=p.totalIncomplete?' · total is incomplete':'';
   el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}${completeness}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
+}
+async function removeHolding(id){
+  if(!Number.isInteger(Number(id)))return;
+  if(!confirm('Remove this manual portfolio holding?'))return;
+  try{
+    await api('/api/portfolio/holdings/'+encodeURIComponent(id),{method:'DELETE'});
+    const p=await api('/api/portfolio');
+    renderPortfolio(p);
+  }catch(e){alert(e.message||'Unable to remove holding.')}
 }
 async function syncChat(){
  if(chatSyncBusy)return;
