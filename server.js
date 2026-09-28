@@ -9,6 +9,7 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portf
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
+const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
 
 const app = express();
@@ -27,6 +28,9 @@ const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 const github = buildGitHubClientFromEnv();
+const renderOps = buildRenderClientFromEnv();
+const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
+const renderServiceId = process.env.RENDER_SERVICE_ID || 'srv-da8pp1p5efls73e9beo0';
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -65,7 +69,7 @@ const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
 
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '200kb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
@@ -277,11 +281,13 @@ Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}`;
 }
 
-async function callSpecialist({ roleKey, system, user }) {
+async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   let input = [{ role: 'system', content: system }, { role: 'user', content: user }];
-  const tools = roleKey === 'engineering' && github ? engineeringToolDefinitions() : undefined;
+  const tools = roleKey === 'engineering'
+    ? [...engineeringToolDefinitions(), ...renderToolDefinitions()]
+    : undefined;
 
-  for (let turn = 0; turn < 4; turn += 1) {
+  for (let turn = 0; turn < 6; turn += 1) {
     const body = { model: openAIModel, input };
     if (tools) { body.tools = tools; body.tool_choice = 'auto'; }
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -303,13 +309,49 @@ async function callSpecialist({ roleKey, system, user }) {
     for (const call of toolCalls) {
       let args = {};
       try { args = JSON.parse(call.arguments || '{}'); } catch {}
-      const result = await executeEngineeringTool(call.name, args, github);
+      let result;
+      if (call.name.startsWith('github_')) {
+        if (call.name === 'github_create_pr') {
+          result = await executeSkill('github_create_pr', args, {
+            pool, runId, execute: () => ({ ok: true, approvedExecutionRequired: true }),
+          });
+        } else {
+          result = await executeEngineeringTool(call.name, args, github);
+          await auditToolCall(pool, { runId, skill: call.name, tier: 'safe', decision: result.ok ? 'allow' : 'error', args, durationMs: 0, error: result.ok ? null : result.error });
+        }
+      } else if (call.name.startsWith('render_')) {
+        if (call.name === 'render_redeploy') {
+          result = await executeSkill('render_redeploy', args, {
+            pool, runId, execute: () => ({ ok: true, approvedExecutionRequired: true }),
+          });
+        } else {
+          result = await executeRenderTool(call.name, args, renderOps);
+          await auditToolCall(pool, { runId, skill: call.name, tier: 'safe', decision: result.ok ? 'allow' : 'error', args, durationMs: 0, error: result.ok ? null : result.error });
+        }
+      } else {
+        result = { ok: false, error: `Unknown engineering tool: ${call.name}` };
+      }
+
+      if (result?.approvalRequired && onAction) {
+        onAction({
+          type: 'tool.approval',
+          approvalId: result.approval?.approvalId,
+          skill: call.name,
+          args,
+          expiresAt: result.approval?.expiresAt,
+          tier: result.policy?.tier,
+          preview: call.name === 'github_create_pr' ? {
+            title: args.title,
+            branch: args.branch,
+            files: (args.files || []).map(file => ({ path: file.path, content: file.content }))
+          } : null
+        });
+      }
       input.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
-
 async function runAgent(message) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
@@ -377,7 +419,7 @@ async function runAgent(message) {
         getPortfolioSummary,
         caldav,
         delegateToTeam,
-        callSpecialist,
+        callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
         onAction: (action) => actions.push(action),
         runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       });
@@ -500,6 +542,8 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
       recordHolding,
       getPortfolioSummary,
       caldav,
+      github,
+      renderOps,
       delegateToTeam,
       callSpecialist,
       onAction: action => actions.push(action),
