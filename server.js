@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
@@ -232,7 +233,16 @@ async function getAgentContext() {
   return { memories: memories.rows, projects: projects.rows, capabilities: capabilities.rows };
 }
 
+function loadAgentOperatingFiles() {
+  const names = ['SOUL.md', 'USER.md', 'AGENTS.md'];
+  return names.map(name => {
+    try { return { name, content: fs.readFileSync(path.join(__dirname, name), 'utf8') }; }
+    catch { return { name, content: '' }; }
+  }).filter(item => item.content);
+}
+
 function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
+  const operatingFiles = loadAgentOperatingFiles();
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
 Architecture rules:
