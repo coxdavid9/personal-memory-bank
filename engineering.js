@@ -23,6 +23,11 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
   async function getRepo() { return request(`/repos/${repo}`); }
   async function listOpenPullRequests() { return request(`/repos/${repo}/pulls?state=open&per_page=20`); }
   async function getPullRequest(number) { return request(`/repos/${repo}/pulls/${encodeURIComponent(number)}`); }
+  async function getPullRequestStatus(number) {
+    const pr = await getPullRequest(number);
+    const checks = pr.head?.sha ? await request(`/repos/${repo}/commits/${pr.head.sha}/check-runs?per_page=50`) : { check_runs: [] };
+    return { number: pr.number, state: pr.state, merged: pr.merged, mergeable: pr.mergeable, mergeCommitSha: pr.merge_commit_sha, headSha: pr.head?.sha || null, checks: (checks.check_runs || []).map(check => ({ name: check.name, status: check.status, conclusion: check.conclusion, htmlUrl: check.html_url })) };
+  }
   async function listIssues(state = 'open') { return request(`/repos/${repo}/issues?state=${encodeURIComponent(state)}&per_page=30`); }
 
   async function getFile(path, ref = 'main') {
@@ -103,6 +108,11 @@ function engineeringToolDefinitions({ render = false } = {}) {
       strict: true, parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
     },
     {
+      type: 'function', name: 'github_pr_status',
+      description: 'Read a pull request plus its GitHub Actions check status, mergeability, and merge commit.',
+      strict: true, parameters: { type: 'object', properties: { number: { type: 'integer' } }, required: ['number'], additionalProperties: false }
+    },
+    {
       type: 'function', name: 'github_pull_request',
       description: 'Read one pull request by number.',
       strict: true, parameters: { type: 'object', properties: { number: { type: 'integer' } }, required: ['number'], additionalProperties: false }
@@ -161,6 +171,7 @@ async function executeEngineeringTool(name, args, client) {
   if (!client) return { ok: false, error: 'GitHub integration is not configured.' };
   if (name === 'github_repo_status') return { ok: true, repository: await client.getRepo() };
   if (name === 'github_open_pull_requests') return { ok: true, pullRequests: await client.listOpenPullRequests() };
+  if (name === 'github_pr_status') return { ok: true, status: await client.getPullRequestStatus(args.number) };
   if (name === 'github_pull_request') return { ok: true, pullRequest: await client.getPullRequest(args.number) };
   if (name === 'github_issues') return { ok: true, issues: await client.listIssues(args.state) };
   if (name === 'github_file') return { ok: true, file: await client.getFile(args.path, args.ref) };
