@@ -11,22 +11,80 @@
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <title>David's Personal Agent</title>
 <style>
-*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:0;background:#f5f7fb;color:#172033}main{max-width:1100px;margin:0 auto;padding:22px}.top{display:flex;align-items:center;gap:14px;margin-bottom:18px}.orb{width:48px;height:48px;border-radius:15px;background:#172033;color:#fff;display:grid;place-items:center;font-size:24px}.top h1{margin:0;font-size:25px}.top p{margin:3px 0 0;color:#667085}.grid{display:grid;grid-template-columns:1.35fr .65fr;gap:16px}.card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:18px;box-shadow:0 3px 12px #10182808}.chat{height:min(680px,calc(100dvh - 150px));min-height:530px;display:flex;flex-direction:column;overflow:hidden}.messages{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:5px 2px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}.bubble{max-width:88%;padding:11px 13px;border-radius:14px;margin:9px 0;white-space:pre-wrap;line-height:1.45;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}.user{margin-left:auto;background:#172033;color:#fff;border-bottom-right-radius:5px}.assistant{background:#f2f4f7;border-bottom-left-radius:5px}.action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}.approval-actions{display:flex;gap:7px;margin-top:9px}.approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}.approval-actions .btn{flex:1}.composer{display:flex;gap:8px;margin-top:12px}.composer input{flex:1}.input,select,button{font:inherit}.input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px}.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;background:#172033;color:#fff}.btn.secondary{background:#eef2f6;color:#172033}.side h2,.chat h2{margin:0 0 8px}.muted{color:#667085;font-size:13px}.cap{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin:9px 0}.cap strong{display:block}.badge{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:99px;background:#ecfdf3;color:#067647;font-size:11px}.status{padding:9px 11px;border-radius:10px;background:#f2f4f7;font-size:12px;margin-bottom:10px}.status.good{background:#ecfdf3;color:#067647}.memory{border:1px solid #e4e7ec;border-radius:10px;padding:10px;margin:7px 0}.memory small{color:#667085}.quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.quick button{font-size:12px;padding:8px 10px}.section{margin-top:16px}@media(max-width:800px){main{padding:14px}.grid{grid-template-columns:1fr}.chat{height:calc(100dvh - 110px);min-height:520px;max-height:calc(100dvh - 110px)}.top h1{font-size:22px}}
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:0;background:linear-gradient(180deg,#f7f9fc 0%,#eef2f7 100%);color:#172033}
+main{max-width:1180px;margin:0 auto;padding:18px}
+.top{display:flex;align-items:center;gap:14px;margin-bottom:12px;padding:12px 2px}
+.orb{width:46px;height:46px;border-radius:15px;background:#172033;color:#fff;display:grid;place-items:center;font-size:23px;box-shadow:0 8px 20px #10182818}
+.top h1{margin:0;font-size:24px;letter-spacing:-.3px}.top p{margin:3px 0 0;color:#667085}
+.top-actions{display:flex;gap:8px}
+.status{padding:9px 12px;border:1px solid #e4e7ec;border-radius:12px;background:#fff;font-size:12px;margin-bottom:10px;box-shadow:0 2px 8px #10182808}
+.status.good{background:#f0fdf4;color:#067647}
+.approval-bar{background:#fff;border:1px solid #f1d38a;border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 3px 12px #10182808}
+.approval-bar h2{margin:0 0 8px;font-size:15px}.approval-bar .memory{background:#fffaf0}
+.grid{display:block}
+.card{background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:18px;box-shadow:0 5px 18px #1018280a}
+.chat{height:min(730px,calc(100dvh - 175px));min-height:540px;display:flex;flex-direction:column;overflow:hidden}
+.chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
+.chat h2{margin:0 0 5px}.muted{color:#667085;font-size:13px}
+.messages{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px 2px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.bubble{max-width:88%;padding:11px 13px;border-radius:14px;margin:9px 0;white-space:pre-wrap;line-height:1.45;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.user{margin-left:auto;background:#172033;color:#fff;border-bottom-right-radius:5px}.assistant{background:#f2f4f7;border-bottom-left-radius:5px}
+.action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
+.approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}
+.approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+.composer{display:flex;gap:8px;margin-top:12px}.composer input{flex:1}
+.input,select,button{font:inherit}.input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px}
+.btn{border:0;border-radius:11px;padding:10px 14px;font-weight:700;cursor:pointer;background:#172033;color:#fff}.btn.secondary{background:#eef2f6;color:#172033}.btn.small{padding:8px 11px;font-size:12px}
+.quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.quick button{font-size:12px;padding:8px 10px}
+.memory{border:1px solid #e4e7ec;border-radius:10px;padding:10px;margin:7px 0}.memory small{color:#667085}
+.drawer{position:fixed;inset:0;background:#10182866;z-index:20;display:flex;justify-content:flex-end}
+.drawer.hidden{display:none}.drawer-panel{width:min(430px,92vw);height:100%;background:#f7f9fc;padding:18px;overflow:auto;box-shadow:-12px 0 30px #10182820}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.drawer-head h2{margin:0}
+.drawer-section{margin-bottom:12px}.drawer-section .card{margin-top:8px}.drawer-section h3{margin:0 0 7px;font-size:14px}
+.cap{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin:9px 0;background:#fff}.cap strong{display:block}
+.badge{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:99px;background:#ecfdf3;color:#067647;font-size:11px}
+.section{margin-top:16px}
+@media(max-width:800px){
+ main{padding:10px}.top{padding:8px 2px}.top h1{font-size:20px}.top p{font-size:12px}.top .btn{padding:8px 10px}
+ .chat{height:calc(100dvh - 150px);min-height:500px;max-height:calc(100dvh - 150px);padding:14px}
+ .chat-head{display:block}.chat-head .btn{margin-top:8px}.bubble{max-width:92%}.approval-bar{padding:10px}
+}
 </style>
 </head>
 <body>
 <main>
-<header class="top"><div class="orb">🧠</div><div style="flex:1"><h1>David's Personal Agent</h1><p>Knows what matters. Helps move it forward.</p></div><button class="btn secondary" onclick="logout()">Sign out</button></header>
+<header class="top">
+  <div class="orb">🧠</div>
+  <div style="flex:1"><h1>David's Personal Agent</h1><p>Your private AI workspace.</p></div>
+  <div class="top-actions"><button class="btn secondary" onclick="toggleDrawer(true)">☰ More</button><button class="btn secondary" onclick="logout()">Sign out</button></div>
+</header>
 <div id="status"></div>
+<section id="approvalBar" class="approval-bar" style="display:none"><div id="approvals"></div></section>
 <div class="grid">
-<section class="card chat"><h2>Talk to your agent</h2><div class="muted">This is the beginning of the agent layer. Memory, projects and capabilities are kept separate so new tools can be added later.</div><div id="messages" class="messages"></div><div class="quick"><button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button><button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button><button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button></div><div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div></section>
-<aside class="side">
-<section class="card"><h2>Portfolio</h2><div id="portfolio" class="muted">Loading...</div></section>
-<section class="card section"><h2>Capabilities</h2><div id="caps" class="muted">Loading...</div></section>
-<section class="card section"><h2>Projects</h2><div id="projects" class="muted">Loading...</div></section>
-<section class="card section"><h2>Pending approvals</h2><div id="approvals" class="muted">Loading...</div></section><section class="card section"><h2>Memory</h2><div class="muted">Capture something you want me to remember.</div><textarea id="memoryText" class="input" style="margin-top:9px;min-height:85px" placeholder="Example: Follow up with the recruiter Friday."></textarea><div style="display:flex;gap:7px;margin-top:7px"><select id="memoryType" class="input"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select><button class="btn" onclick="saveMemory()">Remember</button></div></section>
-</aside></div>
+<section class="card chat">
+  <div class="chat-head">
+    <div><h2>Talk to your agent</h2><div class="muted">Ask questions, work through ideas, or tell me what you want to get done.</div></div>
+  </div>
+  <div id="messages" class="messages"></div>
+  <div class="quick">
+    <button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button>
+    <button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button>
+    <button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button>
+  </div>
+  <div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+</section>
+</div>
 </main>
+<div id="drawer" class="drawer hidden" onclick="if(event.target===this)toggleDrawer(false)">
+  <aside class="drawer-panel">
+    <div class="drawer-head"><h2>Agent details</h2><button class="btn secondary" onclick="toggleDrawer(false)">Close</button></div>
+    <div class="drawer-section"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
+    <div class="drawer-section"><h3>Capabilities</h3><section class="card"><div id="caps" class="muted">Loading...</div></section></div>
+    <div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div>
+    <div class="drawer-section"><section class="card"><strong>Memory</strong><div class="muted" style="margin-top:6px">Memory is handled through the conversation. You don't need to maintain a separate memory list here.</div></section></div>
+  </aside>
+</div>
 <script>
 let messages=[];
 let chatSyncTimer=null;
@@ -84,7 +142,8 @@ async function load(){
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
 async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages();try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages()}}
 function quick(text){document.getElementById('message').value=text;send()}
-async function saveMemory(){const input=document.getElementById('memoryText'),text=input.value.trim();if(!text)return;try{await api('/api/memories',{method:'POST',body:JSON.stringify({text,type:document.getElementById('memoryType').value,priority:'Normal',done:false})});input.value='';alert('Remembered.');}catch(e){alert(e.message)}}
+function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
+
 load();
 chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
