@@ -239,7 +239,7 @@ async function runDailyPortfolioAgent({ pool, getPortfolioSummary, now = new Dat
   if (gate.notify) {
     const message = await composeNotification(briefing, gate);
     const notification = await executeSkill('notify', { recipient: 'David', reason: gate.reason }, { pool, runId: `heartbeat_${asOf}`, execute: () => notify(message) });
-    if (!notification?.ok) throw new Error(notification?.error || 'Portfolio notification was not sent.');
+    if (notification?.ok === false) throw new Error(notification?.error || 'Portfolio notification was not sent.');
     notificationSent = true;
   }
 
