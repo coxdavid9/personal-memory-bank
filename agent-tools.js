@@ -75,11 +75,36 @@ const calendarEventTool = {
   }
 };
 
+
+
+const delegateTeamTool = {
+  type: 'function',
+  name: 'delegate_to_team',
+  description: 'Delegate a private task to one specialist on David’s internal AI team. Use for engineering, business operations, product, customer operations, or Chief of Staff work. This team is internal only and is never exposed to ClearCFO customers.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      role: { type: 'string', enum: ['chief_of_staff','engineering','business_ops','product','customer_ops'], description: 'Specialist role to handle the task.' },
+      task: { type: 'string', description: 'The concrete task for the specialist.' },
+      project: { type: ['string','null'], description: 'Related project, such as ClearCFO, Personal Agent, Portfolio, or Job Search.' },
+      context: { type: ['string','null'], description: 'Relevant context the specialist needs.' }
+    },
+    required: ['role','task','project','context'],
+    additionalProperties: false
+  }
+};
+
 function buildAgentTools() {
-  return [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool];
+  return [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
 }
 
 async function executeAgentTool(name, args, deps) {
+  if (name === 'delegate_to_team') {
+    if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
+    return deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist });
+  }
+
   if (name === 'record_holding') return deps.recordHolding(deps.pool, args);
   if (name === 'get_portfolio_summary') return { ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) };
 

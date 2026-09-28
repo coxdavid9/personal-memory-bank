@@ -6,6 +6,7 @@ const { buildAgentTools, executeAgentTool } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
+const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -139,6 +140,7 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS agent_messages_created_idx ON agent_messages(created_at DESC)`);
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
+  await initAgentTeamDb(pool);
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -157,6 +159,7 @@ async function initDb() {
     ['job-search', 'Job Search', 'Search and evaluate accounting/finance jobs using David’s saved preferences and application history.'],
     ['calendar', 'iPhone Calendar', 'Prepare calendar events for the iPhone. The PWA presents an Add to iPhone Calendar action; the native mobile app can also create events on-device after permission is granted.'],
     ['portfolio', 'Portfolio', 'Track investment holdings, account values, allocation, and portfolio history. Manual holdings work without Plaid; brokerage sync is added separately.'],
+    ['agent-team', 'AI Team', 'Private specialist agents for engineering, business operations, product, customer operations, and Chief of Staff work. Internal only; never customer-facing.'],
   ];
   for (const [key, name, description] of capabilities) {
     await pool.query(`
@@ -225,7 +228,7 @@ async function getAgentContext() {
   return { memories: memories.rows, projects: projects.rows, capabilities: capabilities.rows };
 }
 
-function agentSystemPrompt(context) {
+function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
 Architecture rules:
@@ -248,14 +251,43 @@ ${JSON.stringify(context.projects, null, 2)}
 Available capabilities:
 ${JSON.stringify(context.capabilities, null, 2)}
 
+Private internal AI team:
+${JSON.stringify(teamRoles, null, 2)}
+
+Recent team work:
+${JSON.stringify(recentTeamTasks, null, 2)}
+
+Team rules: The team is private to David. It is for building and operating David's projects, not for ClearCFO customers. Delegate concrete work to specialists instead of pretending you personally completed external actions.
+
 Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}`;
+}
+
+async function callSpecialist({ system, user }) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: openAIModel,
+      input: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ]
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || 'Specialist agent request failed.');
+  const text = String(data.output_text || '').trim();
+  if (!text) throw new Error('Specialist agent returned no text.');
+  return text;
 }
 
 async function runAgent(message) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext();
+  const teamRoles = getTeamRoles();
+  const recentTeamTasks = await getRecentTeamTasks(pool, 12);
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
   const input = [
     { role: 'system', content: agentSystemPrompt(context) },
@@ -315,6 +347,8 @@ async function runAgent(message) {
         recordHolding,
         getPortfolioSummary,
         caldav,
+        delegateToTeam,
+        callSpecialist,
         onAction: (action) => actions.push(action),
       });
 
@@ -378,6 +412,17 @@ app.post('/api/portfolio/holdings', async (req,res) => {
     if(!result.ok) return res.status(400).json(result);
     res.status(201).json(result);
   } catch(err) { console.error('Manual holding failed:',err); res.status(500).json({error:'Unable to save holding.'}); }
+});
+
+
+
+app.get('/api/team', async (req, res) => {
+  try {
+    res.json({ roles: getTeamRoles(), recentTasks: await getRecentTeamTasks(pool, 30) });
+  } catch (err) {
+    console.error('Unable to load agent team:', err);
+    res.status(500).json({ error: 'Unable to load agent team.' });
+  }
 });
 
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
