@@ -10,7 +10,7 @@ const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-ag
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
-const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
+const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 
 const app = express();
