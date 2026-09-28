@@ -4,7 +4,7 @@ const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineering
 
 test('engineering tools expose read-only GitHub operations', () => {
   const names = engineeringToolDefinitions().map(x => x.name);
-  assert.deepEqual(names, ['github_repo_status','github_open_pull_requests','github_pull_request','github_issues']);
+  assert.deepEqual(names, ['github_repo_status','github_open_pull_requests','github_pr_status','github_pull_request','github_issues','github_file','github_create_pr']);
 });
 
 test('GitHub client reads repository metadata with authorization', async () => {

@@ -9,7 +9,9 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portf
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
-const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
+const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
+const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
+const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -27,6 +29,9 @@ const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 const github = buildGitHubClientFromEnv();
+const renderOps = buildRenderClientFromEnv();
+const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
+const renderServiceId = process.env.RENDER_SERVICE_ID || 'srv-da8pp1p5efls73e9beo0';
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -57,7 +62,7 @@ function authPage(message = '') {
 
 function requireAuth(req, res, next) {
   if (isAuthenticated(req)) return next();
-  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
+  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/api/webhooks/github' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
   return res.redirect('/login');
 }
@@ -65,7 +70,7 @@ const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
 
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '200kb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
@@ -146,6 +151,16 @@ async function initDb() {
   await initPortfolioAgentDb(pool);
   await initAgentTeamDb(pool);
   await initPolicyDb(pool);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS github_webhook_events (
+      delivery_id TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      event_name TEXT NOT NULL,
+      action TEXT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS github_webhook_events_created_idx ON github_webhook_events(created_at DESC)');
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -189,6 +204,23 @@ function emailHtml(memory) {
   const safePriority = String(memory.priority || 'Normal').replace(/[&<>\"']/g, '');
   const due = new Date(memory.due).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
   return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#20242a"><h2>🧠 Personal Agent</h2><p style="color:#667085">You asked me to bring this back to your attention.</p><div style="border:1px solid #e5e7eb;border-left:4px solid #f79009;border-radius:10px;padding:16px;margin:20px 0"><div style="font-size:12px;color:#667085;margin-bottom:8px">${safeType} · ${safePriority} · ${due}</div><div style="font-size:18px;font-weight:600">${safeText}</div></div><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px">Open Personal Agent</a></div>`;
+}
+
+async function sendAgentEmail(subject, text) {
+  if (!hasEmailReminders) return { sent: false, reason: 'email_not_configured' };
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+    body: JSON.stringify({
+      from: reminderFrom,
+      to: [process.env.REMINDER_EMAIL],
+      subject: String(subject).slice(0, 180),
+      text: String(text).slice(0, 10000)
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || data?.error || 'Unable to send agent email.');
+  return { sent: true, id: data.id || null };
 }
 
 async function scheduleReminderEmail(memory) {
@@ -277,11 +309,13 @@ Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}`;
 }
 
-async function callSpecialist({ roleKey, system, user }) {
+async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   let input = [{ role: 'system', content: system }, { role: 'user', content: user }];
-  const tools = roleKey === 'engineering' && github ? engineeringToolDefinitions() : undefined;
+  const tools = roleKey === 'engineering'
+    ? [...engineeringToolDefinitions(), ...renderToolDefinitions()]
+    : undefined;
 
-  for (let turn = 0; turn < 4; turn += 1) {
+  for (let turn = 0; turn < 6; turn += 1) {
     const body = { model: openAIModel, input };
     if (tools) { body.tools = tools; body.tool_choice = 'auto'; }
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -303,13 +337,50 @@ async function callSpecialist({ roleKey, system, user }) {
     for (const call of toolCalls) {
       let args = {};
       try { args = JSON.parse(call.arguments || '{}'); } catch {}
-      const result = await executeEngineeringTool(call.name, args, github);
+      let result;
+      if (call.name.startsWith('github_')) {
+        if (call.name === 'github_create_pr') {
+          result = await executeSkill('github_create_pr', args, {
+            pool, runId, execute: () => ({ ok: true, approvedExecutionRequired: true }),
+          });
+        } else {
+          result = await executeEngineeringTool(call.name, args, github);
+          await auditToolCall(pool, { runId, skill: call.name, tier: 'safe', decision: result.ok ? 'allow' : 'error', args, durationMs: 0, error: result.ok ? null : result.error });
+        }
+      } else if (call.name.startsWith('render_')) {
+        if (call.name === 'render_redeploy') {
+          result = await executeSkill('render_redeploy', args, {
+            pool, runId, execute: () => ({ ok: true, approvedExecutionRequired: true }),
+          });
+        } else {
+          result = await executeRenderTool(call.name, args, renderOps);
+          await auditToolCall(pool, { runId, skill: call.name, tier: 'safe', decision: result.ok ? 'allow' : 'error', args, durationMs: 0, error: result.ok ? null : result.error });
+        }
+      } else {
+        result = { ok: false, error: `Unknown engineering tool: ${call.name}` };
+      }
+
+      if (result?.approvalRequired && onAction) {
+        onAction({
+          type: 'tool.approval',
+          approvalId: result.approval?.approvalId,
+          skill: call.name,
+          args,
+          expiresAt: result.approval?.expiresAt,
+          tier: result.policy?.tier,
+          preview: call.name === 'github_create_pr' ? {
+            title: args.title,
+            branch: args.branch,
+            diff: String(args.diff || '').slice(0, 12000),
+            files: (args.files || []).map(file => ({ path: file.path, content: file.content }))
+          } : null
+        });
+      }
       input.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
-
 async function runAgent(message) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
@@ -376,8 +447,10 @@ async function runAgent(message) {
         recordHolding,
         getPortfolioSummary,
         caldav,
+        github,
+        renderOps,
         delegateToTeam,
-        callSpecialist,
+        callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
         onAction: (action) => actions.push(action),
         runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       });
@@ -408,6 +481,59 @@ app.get('/api/calendar.ics', (req, res) => {
   res.setHeader('Content-Disposition','inline; filename="personal-agent-event.ics"');
   res.setHeader('Cache-Control','no-store');
   res.send(lines.join('\r\n')+'\r\n');
+});
+
+app.post('/api/webhooks/github', async (req, res) => {
+  if (!githubWebhookSecret) return res.status(503).json({ error: 'GitHub webhook is not configured.' });
+  const signature = String(req.get('x-hub-signature-256') || '');
+  if (!verifyGitHubSignature(githubWebhookSecret, req.rawBody || Buffer.from(''), signature)) return res.status(401).json({ error: 'Invalid webhook signature.' });
+
+  const deliveryId = String(req.get('x-github-delivery') || '');
+  const eventName = String(req.get('x-github-event') || '');
+  if (!deliveryId || !eventName) return res.status(400).json({ error: 'Missing GitHub webhook headers.' });
+
+  try {
+    if (pool) {
+      const inserted = await pool.query(
+        'INSERT INTO github_webhook_events(delivery_id,event_name,action,payload) VALUES($1,$2,$3,$4) ON CONFLICT(delivery_id) DO NOTHING RETURNING delivery_id',
+        [deliveryId, eventName, req.body?.action || null, JSON.stringify(req.body || {})]
+      );
+      if (!inserted.rowCount) return res.json({ ok: true, duplicate: true });
+    }
+
+    if (failedCheckRunEvent(eventName, req.body)) {
+      const check = req.body.check_run;
+      const pr = check.pull_requests?.[0]?.number;
+      const repo = req.body.repository?.full_name || process.env.GITHUB_REPO || 'coxdavid9/personal-memory-bank';
+      const subject = `CI failed on PR #${pr || '?'}`;
+      const text = `${subject} in ${repo}. Failing check: ${check.name || 'unknown'}. Open the Personal Agent to inspect the PR and logs.`;
+      const email = await sendAgentEmail(subject, text);
+      return res.json({ ok: true, notificationSent: email.sent });
+    }
+
+    if (eventName === 'push' && req.body?.ref === 'refs/heads/main' && pool) {
+      const head = req.body.head_commit;
+      if (head?.id) {
+        await pool.query(
+          'INSERT INTO memories(text,type,priority) VALUES($1,$2,$3)',
+          [`GitHub main changed: ${head.id.slice(0,12)} — ${String(head.message || '').split('\\n')[0].slice(0,300)}`, 'Work', 'Normal']
+        );
+      }
+    }
+
+    if (eventName === 'pull_request' && req.body?.action === 'closed' && req.body?.pull_request?.merged && pool) {
+      const pr = req.body.pull_request;
+      await pool.query(
+        'INSERT INTO memories(text,type,priority) VALUES($1,$2,$3)',
+        [`GitHub PR #${pr.number} merged: ${String(pr.title || '').slice(0,300)} — ${String(pr.merge_commit_sha || '').slice(0,12)}`, 'Work', 'Normal']
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('GitHub webhook processing failed:', err);
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  }
 });
 
 app.post('/api/internal/daily-portfolio', async (req, res) => {
@@ -500,6 +626,8 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
       recordHolding,
       getPortfolioSummary,
       caldav,
+      github,
+      renderOps,
       delegateToTeam,
       callSpecialist,
       onAction: action => actions.push(action),

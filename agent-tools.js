@@ -129,6 +129,23 @@ async function executeAgentTool(name, args, deps) {
     if (result?.approvalRequired && deps.onAction) deps.onAction({ type: 'tool.approval', approvalId: result.approval?.approvalId, skill, args: result.approval?.args || args, expiresAt: result.approval?.expiresAt, tier: result.policy?.tier });
     return result;
   };
+  if (name === 'github_create_pr') {
+    if (!deps.github) return { ok: false, error: 'GitHub integration is not configured.' };
+    return run('github_create_pr', () => deps.github.createPR({
+      branch: args.branch,
+      base: args.base,
+      title: args.title,
+      body: args.body,
+      draft: Boolean(args.draft),
+      files: args.files
+    }));
+  }
+
+  if (name === 'render_redeploy') {
+    if (!deps.renderOps) return { ok: false, error: 'Render integration is not configured.' };
+    return run('render_redeploy', () => deps.renderOps.redeploy());
+  }
+
   if (name === 'delegate_to_team') {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
     return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
