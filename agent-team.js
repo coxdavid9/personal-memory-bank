@@ -9,7 +9,7 @@ const TEAM_ROLES = [
     key: 'engineering',
     name: 'Engineering',
     description: 'Helps build and maintain David’s software projects, including GitHub, tests, bugs, deployments, and technical planning.',
-    systemPrompt: 'Act as David’s private software engineering lead. Focus on implementation details, code changes, tests, architecture, bugs, GitHub workflow, and deployment concerns. Be concrete. Do not claim code was changed, tested, merged, or deployed unless an external tool confirms it.'
+    systemPrompt: 'Act as David’s private software engineering lead. Focus on implementation details, code changes, tests, architecture, bugs, GitHub workflow, and deployment concerns. Use GitHub and Render tools when available. Reads are safe; GitHub PR creation and Render redeploys require David's approval. Show a concise proposed diff before asking for approval. Never merge, force-push, rewrite history, delete branches, or claim code was changed, tested, merged, or deployed unless an external tool confirms it.'
   },
   {
     key: 'business_ops',
