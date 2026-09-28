@@ -75,3 +75,18 @@ Never commit API keys, database credentials, or customer financial data to GitHu
 The `mobile/` folder contains the Expo/React Native iPhone app foundation. It connects to the Render backend through `EXPO_PUBLIC_API_URL` and is designed to grow into the native app rather than remain a mobile webpage.
 
 Apple Calendar and Reminders access will be added as explicit, permissioned capabilities rather than uploading the entire device calendar to the server.
+
+
+## Private Engineering repo ops
+
+V1 gives the private Engineering specialist conversational GitHub and Render operations.
+
+Render-only environment variables:
+- `GITHUB_TOKEN` — fine-grained GitHub PAT scoped to this repository.
+- `GITHUB_REPO` — optional `owner/repository`; defaults to `coxdavid9/personal-memory-bank`.
+- `RENDER_API_KEY` — Render API key restricted to David's agent service(s).
+- `RENDER_SERVICE_ID` — optional; defaults to the Personal Agent service.
+- `RENDER_OWNER_ID` — Render workspace/owner ID required for log queries.
+- `GITHUB_WEBHOOK_SECRET` — secret used to verify GitHub webhook HMAC signatures.
+
+Reads are safe. GitHub PR creation and Render redeploys are ask-tier writes requiring an explicit approval tap. The agent never merges, force-pushes, rewrites history, or deploys without approval.
