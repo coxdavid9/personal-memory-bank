@@ -44,8 +44,13 @@ function renderPortfolio(p){
   if(!p||!p.holdings||!p.holdings.length){el.innerHTML='<div class="muted">No holdings yet — tell me your positions.</div>';return}
   const day=p.dayChange==null?'':`<span class="${p.dayChange>=0?'':'muted'}">${p.dayChange>=0?'+':''}${money(p.dayChange)}${p.dayChangePct==null?'':' ('+p.dayChangePct.toFixed(1)+'%)'}</span>`;
   const accounts=p.accounts.map(a=>`<div class="memory"><strong>${esc(a.account)}</strong><br><span class="muted">${money(a.value)} · ${a.allocationPct.toFixed(1)}%</span></div>`).join('');
-  const holdings=p.holdings.map(h=>`<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+money(h.price)+' · ':''}${money(h.value)} · ${esc(h.source)}</span></div>`).join('');
-  el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
+  const holdings=p.holdings.map(h=>{
+    const value=Number.isFinite(Number(h.value))?money(h.value):'Value unavailable';
+    const price=Number.isFinite(Number(h.price))?money(h.price):'price unavailable';
+    return `<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+price+' · ':''}${value} · ${esc(h.source)}</span></div>`;
+  }).join('');
+  const completeness=p.totalIncomplete?' · total is incomplete':'';
+  el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}${completeness}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
 }
 async function load(){
  try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`;
