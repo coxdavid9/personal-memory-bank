@@ -17,5 +17,7 @@ test('router sends portfolio requests to portfolio skills', () => {
 test('router keeps engineering tools out of normal chat', () => {
   assert.equal(inferJob('What do you know about ClearCFO?'), 'general');
   const names = buildAgentTools({ job: 'general' }).map(tool => tool.name);
-  assert.ok(!names.includes('delegate_to_team'));
+  assert.ok(!names.includes('github_repo_status'));
+  assert.ok(!names.includes('github_create_pr'));
+  assert.ok(names.includes('delegate_to_team'));
 });
