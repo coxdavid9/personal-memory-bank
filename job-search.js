@@ -47,6 +47,27 @@ async function saveJobApplication(pool, args) {
   const company = String(args.company || '').trim().slice(0, 200);
   if (!title || !company) return { ok: false, error: 'Job title and company are required.' };
 
+  const existing = await pool.query(`
+    SELECT id FROM job_applications
+    WHERE LOWER(title)=LOWER($1) AND LOWER(company)=LOWER($2)
+    ORDER BY updated_at DESC LIMIT 1
+  `, [title, company]);
+  if (existing.rows[0]) {
+    const result = await pool.query(`
+      UPDATE job_applications
+      SET location=$1, url=$2, status=$3, notes=$4, updated_at=NOW()
+      WHERE id=$5
+      RETURNING id, created_at AS created, updated_at AS updated, title, company, location, url, status, notes
+    `, [
+      args.location ? String(args.location).slice(0, 300) : null,
+      args.url ? String(args.url).slice(0, 2000) : null,
+      args.status,
+      args.notes ? String(args.notes).slice(0, 4000) : null,
+      existing.rows[0].id
+    ]);
+    return { ok: true, application: result.rows[0], updated: true };
+  }
+
   const result = await pool.query(`
     INSERT INTO job_applications(title, company, location, url, status, notes)
     VALUES($1,$2,$3,$4,$5,$6)
