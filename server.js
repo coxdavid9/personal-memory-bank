@@ -11,6 +11,7 @@ const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = re
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
+const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -484,10 +485,7 @@ app.get('/api/calendar.ics', (req, res) => {
 app.post('/api/webhooks/github', async (req, res) => {
   if (!githubWebhookSecret) return res.status(503).json({ error: 'GitHub webhook is not configured.' });
   const signature = String(req.get('x-hub-signature-256') || '');
-  const expected = 'sha256=' + crypto.createHmac('sha256', githubWebhookSecret).update(req.rawBody || Buffer.from('')).digest('hex');
-  const sigBuf = Buffer.from(signature);
-  const expectedBuf = Buffer.from(expected);
-  if (!signature || sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return res.status(401).json({ error: 'Invalid webhook signature.' });
+  if (!verifyGitHubSignature(githubWebhookSecret, req.rawBody || Buffer.from(''), signature)) return res.status(401).json({ error: 'Invalid webhook signature.' });
 
   const deliveryId = String(req.get('x-github-delivery') || '');
   const eventName = String(req.get('x-github-event') || '');
@@ -502,7 +500,7 @@ app.post('/api/webhooks/github', async (req, res) => {
       if (!inserted.rowCount) return res.json({ ok: true, duplicate: true });
     }
 
-    if (eventName === 'check_run' && req.body?.action === 'completed' && req.body?.check_run?.conclusion === 'failure') {
+    if (failedCheckRunEvent(eventName, req.body)) {
       const check = req.body.check_run;
       const pr = check.pull_requests?.[0]?.number;
       const repo = req.body.repository?.full_name || process.env.GITHUB_REPO || 'coxdavid9/personal-memory-bank';
