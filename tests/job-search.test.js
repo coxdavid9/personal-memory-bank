@@ -10,9 +10,9 @@ test('router sends job requests to job search', () => {
     'save_memory',
     'get_personal_context',
     'get_job_application_history',
-    'save_job_application',
-    'web_search_preview'
+    'save_job_application'
   ]);
+  assert.ok(tools.some(tool => tool.type === 'web_search_preview'));
 });
 
 test('job search tool definitions include application tracking but not engineering writes', () => {
