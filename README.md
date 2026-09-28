@@ -1,4 +1,4 @@
-# David's Personal Agent
+# Jarvis
 
 A private personal AI agent that remembers what matters, understands David's projects and goals, and gains new capabilities through modular tools.
 
