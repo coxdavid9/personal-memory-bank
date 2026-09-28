@@ -79,6 +79,34 @@ const calendarEventTool = {
 
 
 
+const jobHistoryTool = {
+  type: 'function',
+  name: 'get_job_application_history',
+  description: "Retrieve David's tracked job applications and rejections so live job searches can exclude roles he already applied to or rejected. Use before evaluating live jobs.",
+  strict: true,
+  parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
+};
+
+const saveJobApplicationTool = {
+  type: 'function',
+  name: 'save_job_application',
+  description: 'Track a job David has applied to, rejected, saved for later, or wants to ignore. Use when David explicitly tells you about a job decision or asks you to track it.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Job title.' },
+      company: { type: 'string', description: 'Employer name.' },
+      location: { type: ['string','null'], description: 'Job location, or null.' },
+      url: { type: ['string','null'], description: 'Job listing URL, or null.' },
+      status: { type: 'string', enum: ['saved','applied','rejected','ignore'], description: 'Current decision/status.' },
+      notes: { type: ['string','null'], description: 'Optional notes about the job.' }
+    },
+    required: ['title','company','location','url','status','notes'],
+    additionalProperties: false
+  }
+};
+
 const delegateTeamTool = {
   type: 'function',
   name: 'delegate_to_team',
@@ -99,6 +127,7 @@ const delegateTeamTool = {
 
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
+  job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
@@ -108,6 +137,7 @@ const JOB_SKILLS = Object.freeze({
 
 function inferJob(message = '') {
   const text = String(message).toLowerCase();
+  if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
   if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
   if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
@@ -116,9 +146,11 @@ function inferJob(message = '') {
 }
 
 function buildAgentTools({ job = 'general' } = {}) {
-  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
+  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
-  return all.filter(tool => allowed.has(tool.name));
+  const selected = all.filter(tool => allowed.has(tool.name));
+  if (job === 'job_search') selected.push({ type: 'web_search_preview' });
+  return selected;
 }
 
 async function executeAgentTool(name, args, deps) {
@@ -151,6 +183,9 @@ async function executeAgentTool(name, args, deps) {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
     return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
   }
+
+  if (name === 'get_job_application_history') return run('get_job_application_history', () => deps.getJobApplicationHistory(deps.pool));
+  if (name === 'save_job_application') return run('save_job_application', () => deps.saveJobApplication(deps.pool, args));
 
   if (name === 'record_holding') return run('record_holding', () => deps.recordHolding(deps.pool, args));
   if (name === 'get_portfolio_summary') return run('get_portfolio_summary', async () => ({ ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) }));
