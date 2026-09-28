@@ -144,6 +144,7 @@ function engineeringToolDefinitions({ render = false } = {}) {
           title: { type: 'string' },
           body: { type: 'string' },
           draft: { type: 'boolean' },
+          diff: { type: 'string', description: 'Concise unified-style diff or change summary to show David before approval.' },
           files: {
             type: 'array',
             items: {
@@ -159,7 +160,7 @@ function engineeringToolDefinitions({ render = false } = {}) {
             }
           }
         },
-        required: ['branch','base','title','body','draft','files'],
+        required: ['branch','base','title','body','draft','diff','files'],
         additionalProperties: false
       }
     }
