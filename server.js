@@ -418,6 +418,8 @@ async function runAgent(message) {
         recordHolding,
         getPortfolioSummary,
         caldav,
+        github,
+        renderOps,
         delegateToTeam,
         callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
         onAction: (action) => actions.push(action),
