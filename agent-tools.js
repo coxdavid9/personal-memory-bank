@@ -132,6 +132,7 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'github_create_pr') {
     if (!deps.github) return { ok: false, error: 'GitHub integration is not configured.' };
     return run('github_create_pr', () => deps.github.createPR({
+      repository: args.repository,
       branch: args.branch,
       base: args.base,
       title: args.title,
