@@ -1,3 +1,5 @@
+const { executeSkill } = require('./policy');
+
 const memoryTool = {
   type: 'function',
   name: 'save_memory',
@@ -100,15 +102,18 @@ function buildAgentTools() {
 }
 
 async function executeAgentTool(name, args, deps) {
+  const runId = deps.runId || `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  const run = (skill, fn) => executeSkill(skill, args, { pool: deps.pool, runId, execute: fn });
   if (name === 'delegate_to_team') {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
-    return deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist });
+    return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
   }
 
-  if (name === 'record_holding') return deps.recordHolding(deps.pool, args);
-  if (name === 'get_portfolio_summary') return { ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) };
+  if (name === 'record_holding') return run('record_holding', () => deps.recordHolding(deps.pool, args));
+  if (name === 'get_portfolio_summary') return run('get_portfolio_summary', async () => ({ ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) }));
 
   if (name === 'save_memory') {
+    return run('save_memory', async () => {
     if (!deps.pool) return { ok: false, error: 'Persistent memory is not configured.' };
     const memory = {
       text: String(args.text || '').trim().slice(0, 5000),
@@ -149,10 +154,12 @@ async function executeAgentTool(name, args, deps) {
         }
       }
     }
-    return { ok: true, memory: saved, reminderScheduled, reminderChannels };
+      return { ok: true, memory: saved, reminderScheduled, reminderChannels };
+    });
   }
 
   if (name === 'create_calendar_event') {
+    return run('create_calendar_event', async () => {
     const start = new Date(args.start);
     const end = new Date(args.end);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -183,12 +190,11 @@ async function executeAgentTool(name, args, deps) {
       }
     }
     if (deps.onAction) deps.onAction(action);
-    return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
+      return { ok: true, preparedForCalendar: true, delivery: 'pwa_ics_or_native_client', action };
+    });
   }
 
-  if (name === 'get_personal_context') {
-    return { ok: true, context: await deps.getAgentContext() };
-  }
+  if (name === 'get_personal_context') return run('get_personal_context', async () => ({ ok: true, context: await deps.getAgentContext() }));
 
   return { ok: false, error: `Unknown agent tool: ${name}` };
 }
