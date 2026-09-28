@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax checks
+        run: |
+          node --check server.js
+          node --check agent-tools.js
+          node --check agent-team.js
+          node --check engineering.js
+          node --check portfolio-agent.js
+          node --check portfolio.js
+          node --check market.js
+          node --check caldav.js
+
+      - name: Test suite
+        run: npm test
