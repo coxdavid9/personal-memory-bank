@@ -22,3 +22,24 @@ test('job search tool definitions include application tracking but not engineeri
   assert.ok(!names.includes('github_create_pr'));
   assert.ok(!names.includes('render_redeploy'));
 });
+
+const { classifySkill, TIERS } = require('../policy');
+
+test('job record writes require explicit approval', () => {
+  const policy = classifySkill('save_job_application');
+  assert.equal(policy.tier, TIERS.ASK);
+});
+
+test('ambiguous numbered job lists are not safe to resolve by number', () => {
+  const response = [
+    '## Best matches',
+    '1. Senior Accountant — Robert Half',
+    '2. Accountant — Onin Technology',
+    '',
+    '## My recommended order',
+    '1. Accountant — Onin Technology',
+    '2. Senior Accountant — Robert Half'
+  ].join('\\n');
+  const numberedLists = response.split(/\\n\\s*\\n/).filter(block => /^\\s*1\\.\\s+/m.test(block));
+  assert.equal(numberedLists.length, 2);
+});
