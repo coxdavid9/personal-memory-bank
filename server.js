@@ -8,6 +8,7 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portf
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
+const { initPolicyDb } = require('./policy');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -143,6 +144,7 @@ async function initDb() {
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
   await initAgentTeamDb(pool);
+  await initPolicyDb(pool);
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -366,6 +368,7 @@ async function runAgent(message) {
         delegateToTeam,
         callSpecialist,
         onAction: (action) => actions.push(action),
+        runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       });
 
       responseInput.push({
