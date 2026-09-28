@@ -10,6 +10,7 @@ const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-ag
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
+const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 
@@ -150,6 +151,7 @@ async function initDb() {
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
   await initAgentTeamDb(pool);
+  await initJobSearchDb(pool);
   await initPolicyDb(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS github_webhook_events (
@@ -280,12 +282,13 @@ function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
 Architecture rules:
 - Memory is personal context, not customer data.
 - ClearCFO project knowledge can live in memory, but customer financial data must remain in ClearCFO's own backend/database and should only be accessed through an explicit, controlled integration.
-- Job search is a capability. Use saved preferences and application history when evaluating jobs; never pretend a job is new if the data does not establish that.
+- Job search is a live capability. For job-search requests, use the built-in web search tool to find current listings, and use get_job_application_history before evaluating results. Apply David's saved preferences: prioritize Jonesboro, then Memphis; target around $75k; accounting/finance; avoid manufacturing-only roles; exclude jobs already applied to or rejected when the history establishes that. Be transparent when a listing's salary or status is unavailable. Do not claim a listing is new unless current search data supports it. When David explicitly asks to track a job decision, use save_job_application.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations.
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
 - When David asks to put something on his iPhone Calendar, use create_calendar_event. The server writes to the dedicated Agent calendar through CalDAV when configured; otherwise the PWA presents the existing iCalendar handoff. Never write to David's personal calendars.
 - You have tools. Use them when an action is appropriate instead of merely telling David how to do it.
+- For live job searches, search the web rather than relying on model memory. Prefer current employer or major job-board listings, include the listing date when available, and distinguish sourced facts from your fit analysis.
 - You are the primary conversational router. Handle straightforward questions yourself. When a request clearly benefits from a specialist (engineering, business operations, product, customer operations, or Chief of Staff synthesis), delegate the concrete task to the appropriate internal specialist instead of pretending you completed specialist work yourself.
 - Do not delegate simple conversational questions just to use the team. Delegate when specialist context, project work, implementation, or structured synthesis would materially improve the result.
 - When a specialist is delegated, use its returned result as input to your answer and clearly distinguish specialist analysis from actions actually executed.
@@ -453,6 +456,8 @@ async function runAgent(message) {
         getAgentContext,
         recordHolding,
         getPortfolioSummary,
+        getJobApplicationHistory,
+        saveJobApplication,
         caldav,
         github,
         renderOps,
