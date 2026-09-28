@@ -7,6 +7,7 @@ const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
+const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -23,6 +24,7 @@ const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
 const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
+const github = buildGitHubClientFromEnv();
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -263,23 +265,37 @@ Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}`;
 }
 
-async function callSpecialist({ system, user }) {
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model: openAIModel,
-      input: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ]
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || 'Specialist agent request failed.');
-  const text = String(data.output_text || '').trim();
-  if (!text) throw new Error('Specialist agent returned no text.');
-  return text;
+async function callSpecialist({ roleKey, system, user }) {
+  let input = [{ role: 'system', content: system }, { role: 'user', content: user }];
+  const tools = roleKey === 'engineering' && github ? engineeringToolDefinitions() : undefined;
+
+  for (let turn = 0; turn < 4; turn += 1) {
+    const body = { model: openAIModel, input };
+    if (tools) { body.tools = tools; body.tool_choice = 'auto'; }
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || 'Specialist agent request failed.');
+
+    const toolCalls = (data.output || []).filter(item => item.type === 'function_call');
+    if (!toolCalls.length) {
+      const text = String(data.output_text || '').trim();
+      if (!text) throw new Error('Specialist agent returned no text.');
+      return text;
+    }
+
+    input = [...input, ...(data.output || [])];
+    for (const call of toolCalls) {
+      let args = {};
+      try { args = JSON.parse(call.arguments || '{}'); } catch {}
+      const result = await executeEngineeringTool(call.name, args, github);
+      input.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
+    }
+  }
+  throw new Error('Engineering specialist reached its tool-call limit.');
 }
 
 async function runAgent(message) {
@@ -418,7 +434,7 @@ app.post('/api/portfolio/holdings', async (req,res) => {
 
 app.get('/api/team', async (req, res) => {
   try {
-    res.json({ roles: getTeamRoles(), recentTasks: await getRecentTeamTasks(pool, 30) });
+    res.json({ roles: getTeamRoles(), recentTasks: await getRecentTeamTasks(pool, 30), integrations: { github: Boolean(github) } });
   } catch (err) {
     console.error('Unable to load agent team:', err);
     res.status(500).json({ error: 'Unable to load agent team.' });

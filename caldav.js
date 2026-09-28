@@ -47,7 +47,7 @@ const esc = v => String(v || '')
   .replace(/\\/g, '\\\\')
   .replace(/;/g, '\\;')
   .replace(/,/g, '\\,')
-  .replace(/\\r?\\n/g, '\\n');
+  .replace(/\r?\n/g, '\\n');
 
 const date = value => {
   const d = new Date(value);

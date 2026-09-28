@@ -51,6 +51,12 @@ Required for AI:
 Optional ClearCFO integration placeholder:
 - `CLEARCFO_API_URL`
 
+Private Engineering agent GitHub integration:
+- `GITHUB_TOKEN` — GitHub token stored in Render only; never commit it to the repo.
+- `GITHUB_REPO` — optional `owner/repository` override; defaults to `coxdavid9/personal-memory-bank`.
+
+The GitHub integration is read-only in this first step. It lets the private Engineering agent inspect repository status, open pull requests, individual PRs, and issues before we add controlled write actions.
+
 Optional portfolio market-data fallback:
 - `TWELVEDATA_API_KEY` — Twelve Data API key stored in Render only; never commit it to the repo.
 
