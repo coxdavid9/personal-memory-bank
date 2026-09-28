@@ -103,6 +103,27 @@ async function auditToolCall(pool, entry) {
   );
 }
 
+async function getApproval(pool, id) {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT id,run_id AS "runId",skill,args,status,expires_at AS "expiresAt" FROM tool_approvals WHERE id=$1', [id]);
+  const approval = rows[0] || null;
+  if (approval && approval.status === 'pending' && new Date(approval.expiresAt).getTime() <= Date.now()) {
+    await pool.query('UPDATE tool_approvals SET status=\'expired\', decided_at=NOW(), decision=\'timeout\' WHERE id=$1 AND status=\'pending\'', [id]);
+    approval.status = 'expired';
+    approval.decision = 'timeout';
+  }
+  return approval;
+}
+
+async function decideApproval(pool, id, decision) {
+  const approval = await getApproval(pool, id);
+  if (!approval) return { ok: false, error: 'Approval not found.' };
+  if (approval.status !== 'pending') return { ok: false, error: `Approval is already ${approval.status}.`, approval };
+  if (!['approve','deny'].includes(decision)) return { ok: false, error: 'Decision must be approve or deny.' };
+  await pool.query('UPDATE tool_approvals SET status=$1, decided_at=NOW(), decision=$2 WHERE id=$3', [decision === 'approve' ? 'approved' : 'denied', decision, id]);
+  return { ok: true, approval: { ...approval, status: decision === 'approve' ? 'approved' : 'denied', decision } };
+}
+
 async function requestApproval(pool, { runId, skill, args, timeoutMs = 120000 }) {
   if (!pool) return { status: 'denied', reason: 'approval_storage_unavailable' };
   const expiresAt = new Date(Date.now() + timeoutMs);
@@ -143,4 +164,4 @@ function cryptoRandomId() {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
 }
 
-module.exports = { TIERS, DEFAULT_POLICIES, classifySkill, initPolicyDb, loadWhitelist, summarizeArgs, auditToolCall, requestApproval, executeSkill };
+module.exports = { TIERS, DEFAULT_POLICIES, classifySkill, initPolicyDb, loadWhitelist, summarizeArgs, auditToolCall, requestApproval, getApproval, decideApproval, executeSkill };
