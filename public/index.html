@@ -29,6 +29,8 @@
 </main>
 <script>
 let messages=[];
+let chatSyncTimer=null;
+let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function renderMessages(){const el=document.getElementById('messages');el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=esc(m.content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');const bubble=`<div class="bubble ${m.role==='user'?'user':'assistant'}">${rendered}<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage(${i})">Copy</button></div></div>`;const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';el.scrollTop=el.scrollHeight}
@@ -55,6 +57,17 @@ function renderPortfolio(p){
   const completeness=p.totalIncomplete?' · total is incomplete':'';
   el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}${completeness}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
 }
+async function syncChat(){
+ if(chatSyncBusy)return;
+ chatSyncBusy=true;
+ try{
+   const history=await api('/api/agent/messages');
+   const serverMessages=history.messages||[];
+   const pending=messages.filter(m=>m.id==null || m.id<0);
+   messages=[...serverMessages,...pending];
+   renderMessages();
+ }catch(e){}finally{chatSyncBusy=false;}
+}
 async function load(){
  const setError=(id,e)=>{document.getElementById(id).innerHTML='<div class="muted">Unable to load: '+esc(e.message)+'</div>'};
  try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`}catch(e){document.getElementById('status').innerHTML='<div class="status">'+esc(e.message)+'</div>'}
@@ -73,6 +86,7 @@ async function send(){const input=document.getElementById('message'),text=input.
 function quick(text){document.getElementById('message').value=text;send()}
 async function saveMemory(){const input=document.getElementById('memoryText'),text=input.value.trim();if(!text)return;try{await api('/api/memories',{method:'POST',body:JSON.stringify({text,type:document.getElementById('memoryType').value,priority:'Normal',done:false})});input.value='';alert('Remembered.');}catch(e){alert(e.message)}}
 load();
+chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 </body></html>
