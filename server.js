@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
-const { buildAgentTools, executeAgentTool } = require('./agent-tools');
+const { buildAgentTools, executeAgentTool, inferJob } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
@@ -323,7 +323,8 @@ async function runAgent(message) {
     { role: 'user', content: message },
   ];
 
-  const tools = buildAgentTools();
+  const job = inferJob(message);
+  const tools = buildAgentTools({ job });
   let responseInput = input;
 
   for (let turn = 0; turn < 4; turn += 1) {
