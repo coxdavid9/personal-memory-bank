@@ -91,7 +91,7 @@ let chatSyncTimer=null;
 let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function renderMessages(){const el=document.getElementById('messages');el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=esc(m.content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');const bubble=`<div class="bubble ${m.role==='user'?'user':'assistant'}">${rendered}<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage(${i})">Copy</button></div></div>`;const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';el.scrollTop=el.scrollHeight}
+function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=el.scrollHeight-el.scrollTop-el.clientHeight;const stickToBottom=forceBottom||distanceFromBottom<40;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=esc(m.content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');const bubble=`<div class="bubble ${m.role==='user'?'user':'assistant'}">${rendered}<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage(${i})">Copy</button></div></div>`;const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)el.scrollTop=el.scrollHeight}
 async function copyMessage(index){const textToCopy=messages[index]?.content||'';try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
 function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
 function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
@@ -122,8 +122,10 @@ async function syncChat(){
    const history=await api('/api/agent/messages');
    const serverMessages=history.messages||[];
    const pending=messages.filter(m=>m.id==null || m.id<0);
-   messages=[...serverMessages,...pending];
-   renderMessages();
+   const nextMessages=[...serverMessages,...pending];
+   const changed=nextMessages.length!==messages.length||nextMessages.some((m,i)=>m.id!==messages[i]?.id||m.content!==messages[i]?.content);
+   messages=nextMessages;
+   if(changed)renderMessages();
  }catch(e){}finally{chatSyncBusy=false;}
 }
 async function load(){
@@ -135,12 +137,12 @@ async function load(){
      document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');
      document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
    }).catch(e=>{setError('caps',e);setError('projects',e)}),
-   api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages()}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
+   api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages(true)}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
    loadApprovals().catch(e=>setError('approvals',e))
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
-async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages();try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages()}}
+async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages(true)}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages(true)}}
 function quick(text){document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
 
