@@ -103,7 +103,12 @@ function buildAgentTools() {
 
 async function executeAgentTool(name, args, deps) {
   const runId = deps.runId || `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-  const run = (skill, fn) => executeSkill(skill, args, { pool: deps.pool, runId, execute: fn });
+  const run = async (skill, fn) => {
+    if (deps.skipPolicy) return fn();
+    const result = await executeSkill(skill, args, { pool: deps.pool, runId, execute: fn });
+    if (result?.approvalRequired && deps.onAction) deps.onAction({ type: 'tool.approval', approvalId: result.approval?.approvalId, skill, args: result.approval?.args || args, expiresAt: result.approval?.expiresAt, tier: result.policy?.tier });
+    return result;
+  };
   if (name === 'delegate_to_team') {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
     return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
