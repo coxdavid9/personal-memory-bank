@@ -5,6 +5,7 @@ const DEFAULT_POLICIES = Object.freeze({
   get_personal_context: TIERS.SAFE,
   get_portfolio_summary: TIERS.SAFE,
   record_holding: TIERS.MONITOR,
+  delete_holding: TIERS.ASK,
   create_calendar_event: TIERS.ASK,
   delegate_to_team: TIERS.MONITOR,
   get_job_application_history: TIERS.SAFE,
@@ -24,7 +25,7 @@ const DEFAULT_POLICIES = Object.freeze({
 });
 
 const BLACKLIST = [
-  /^delete_/i,
+  /^delete_(?!holding$)/i,
   /secret|credential|password|api[_-]?key/i,
   /raw[_-]?sql|execute[_-]?sql/i,
   /reconnect.*(financial|bank|brokerage)/i,

@@ -16,3 +16,6 @@ Manual holding records and daily snapshots.
 - Never give buy/sell recommendations.
 - Never represent unavailable quotes as $0.
 - Preserve the distinction between current value, stale value, and incomplete value.
+
+- Manual holdings can be removed with the approval-gated `delete_holding` action. Never delete Plaid-synced holdings.
+- Do not provide buy/sell recommendations.

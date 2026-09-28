@@ -5,7 +5,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
-const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
+const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
@@ -288,7 +288,7 @@ Architecture rules:
   - Before writing any applied, rejected, excluded, saved, or ignored job record from numbered references, echo the resolved mapping as number -> exact title + company and ask David to confirm it. Do not silently write records from an initial numbered-reference message.
   - For corrections, re-read the source user message(s) supporting each surviving record. Quote the relevant wording in the confirmation. If a surviving record is not supported by a source quote, drop it and ask David to restate/confirm it rather than defending the record from memory.
   - Treat job records as structured state: applied, excluded/rejected, and considering/saved. Applied and excluded/rejected roles must be suppressed from future job lead lists.
-- Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations.
+- Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
 - When David asks to put something on his iPhone Calendar, use create_calendar_event. The server writes to the dedicated Agent calendar through CalDAV when configured; otherwise the PWA presents the existing iCalendar handoff. Never write to David's personal calendars.
@@ -465,6 +465,8 @@ async function runAgent(message, imageDataUrl = null) {
         scheduleReminderNtfy,
         getAgentContext,
         recordHolding,
+        deleteHolding,
+        deleteManualHoldings,
         getPortfolioSummary,
         getJobApplicationHistory,
         saveJobApplication,
@@ -590,6 +592,25 @@ app.post('/api/portfolio/holdings', async (req,res) => {
     if(!result.ok) return res.status(400).json(result);
     res.status(201).json(result);
   } catch(err) { console.error('Manual holding failed:',err); res.status(500).json({error:'Unable to save holding.'}); }
+});
+
+app.delete('/api/portfolio/holdings/:id', async (req,res) => {
+  try {
+    const result=await deleteHolding(pool, req.params.id);
+    if (!result.ok) return res.status(404).json({ error:'Manual holding not found.' });
+    res.json(result);
+  } catch(err) { console.error('Manual holding delete failed:',err); res.status(500).json({error:'Unable to delete holding.'}); }
+});
+
+app.delete('/api/portfolio/holdings', async (req,res) => {
+  if (String(req.query.source || '') !== 'manual' || String(req.query.confirm || '') !== 'true') {
+    return res.status(400).json({ error:'Explicit confirmation is required: source=manual&confirm=true.' });
+  }
+  try {
+    const result=await deleteManualHoldings(pool);
+    if (!result.ok) return res.status(503).json(result);
+    res.json(result);
+  } catch(err) { console.error('Manual holdings cleanup failed:',err); res.status(500).json({error:'Unable to delete manual holdings.'}); }
 });
 
 

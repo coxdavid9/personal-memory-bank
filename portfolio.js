@@ -152,4 +152,18 @@ async function getPortfolioSummary(pool) {
   return { totalValue, totalIncomplete, dayChange, dayChangePct, accounts, holdings, stale, connections:connections.rows, asOf:today };
 }
 
-module.exports={initPortfolioDb,recordHolding,getPortfolioSummary};
+async function deleteHolding(pool, id) {
+  if (!pool) return { ok:false, error:'Persistent storage is not configured.' };
+  const holdingId = Number(id);
+  if (!Number.isInteger(holdingId) || holdingId <= 0) return { ok:false, error:'Holding id must be a positive integer.' };
+  const r = await pool.query('DELETE FROM holdings WHERE id = $1 AND source = \'manual\'', [holdingId]);
+  return { ok: r.rowCount > 0 };
+}
+
+async function deleteManualHoldings(pool) {
+  if (!pool) return { ok:false, error:'Persistent storage is not configured.' };
+  const r = await pool.query("DELETE FROM holdings WHERE source = 'manual'");
+  return { ok:true, deleted:r.rowCount };
+}
+
+module.exports={initPortfolioDb,recordHolding,getPortfolioSummary,deleteHolding,deleteManualHoldings};
