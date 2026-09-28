@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { executeSkill } = require('./policy');
 
 const CHICAGO_TZ = 'America/Chicago';
 const DEFAULT_PCT_THRESHOLD = 1;
@@ -232,12 +233,13 @@ async function runDailyPortfolioAgent({ pool, getPortfolioSummary, now = new Dat
   const previousRun = previousResult.rows[0] || null;
   const gate = attentionGate(briefing, previousRun, thresholdPct);
 
-  await recordSnapshot(pool, summary, asOf);
+  await executeSkill('record_snapshot', { asOf }, { pool, runId: `heartbeat_${asOf}`, execute: () => recordSnapshot(pool, summary, asOf) });
 
   let notificationSent = false;
   if (gate.notify) {
     const message = await composeNotification(briefing, gate);
-    await notify(message);
+    const notification = await executeSkill('notify', { recipient: 'David', reason: gate.reason }, { pool, runId: `heartbeat_${asOf}`, execute: () => notify(message) });
+    if (!notification?.ok) throw new Error(notification?.error || 'Portfolio notification was not sent.');
     notificationSent = true;
   }
 
