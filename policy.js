@@ -9,6 +9,7 @@ const DEFAULT_POLICIES = Object.freeze({
   delegate_to_team: TIERS.MONITOR,
   github_repo_status: TIERS.SAFE,
   github_open_pull_requests: TIERS.SAFE,
+  github_pr_status: TIERS.SAFE,
   github_pull_request: TIERS.SAFE,
   github_issues: TIERS.SAFE,
   github_file: TIERS.SAFE,
