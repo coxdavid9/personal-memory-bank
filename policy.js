@@ -11,6 +11,8 @@ const DEFAULT_POLICIES = Object.freeze({
   github_open_pull_requests: TIERS.SAFE,
   github_pull_request: TIERS.SAFE,
   github_issues: TIERS.SAFE,
+  record_snapshot: TIERS.MONITOR,
+  notify: TIERS.MONITOR,
 });
 
 const BLACKLIST = [
