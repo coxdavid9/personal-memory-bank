@@ -4,7 +4,7 @@ const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineering
 
 test('engineering tools expose read-only GitHub operations', () => {
   const names = engineeringToolDefinitions().map(x => x.name);
-  assert.deepEqual(names, ['github_repo_status','github_open_pull_requests','github_recent_merged_pull_requests','github_pr_status','github_pull_request','github_issues','github_file','github_create_pr']);
+  assert.deepEqual(names, ['github_repo_status','github_open_pull_requests','github_pr_status','github_pull_request','github_issues','github_file','github_recent_merged_pull_requests','github_create_pr']);
 });
 
 test('GitHub client reads repository metadata with authorization', async () => {
@@ -28,7 +28,6 @@ test('engineering tool reports missing integration instead of pretending it work
   assert.equal(result.ok, false);
   assert.match(result.error, /not configured/i);
 });
-
 
 test('GitHub client rejects repositories outside the configured allowlist', async () => {
   const oldToken = process.env.GITHUB_TOKEN;
