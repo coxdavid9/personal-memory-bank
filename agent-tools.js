@@ -1,5 +1,15 @@
 const { executeSkill } = require('./policy');
 
+const IMAGE_DATA_URL_RE = /^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
+const MAX_IMAGE_DATA_URL_LENGTH = 4_500_000;
+function validateImageDataUrl(value) {
+  if (value == null || value === '') return null;
+  const image = String(value);
+  if (image.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error('Image is too large. Please use an image under about 3.5 MB.');
+  if (!IMAGE_DATA_URL_RE.test(image)) throw new Error('Unsupported image. Please upload a JPEG, PNG, WebP, or GIF image.');
+  return image;
+}
+
 const memoryTool = {
   type: 'function',
   name: 'save_memory',
@@ -277,4 +287,4 @@ async function executeAgentTool(name, args, deps) {
   return { ok: false, error: `Unknown agent tool: ${name}` };
 }
 
-module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool };
+module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool, validateImageDataUrl };

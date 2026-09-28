@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
-const { buildAgentTools, executeAgentTool, inferJob } = require('./agent-tools');
+const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
@@ -71,7 +71,7 @@ const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
 
-app.use(express.json({ limit: '200kb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
+app.use(express.json({ limit: '5mb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
@@ -396,17 +396,22 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   }
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
-async function runAgent(message) {
+async function runAgent(message, imageDataUrl = null) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext();
   const teamRoles = getTeamRoles();
   const recentTeamTasks = await getRecentTeamTasks(pool, 12);
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
+  const image = validateImageDataUrl(imageDataUrl);
+  const userContent = image
+    ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
+    : String(message || '').trim().slice(0, 10000);
+  if (!String(message || '').trim() && !image) throw new Error('Message or image is required.');
   const input = [
     { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks) },
     ...recent.map(m => ({ role: m.role, content: m.content })),
-    { role: 'user', content: message },
+    { role: 'user', content: userContent },
   ];
 
   const job = inferJob(message);
@@ -667,11 +672,12 @@ app.get('/api/agent/messages', async (req, res) => {
 
 app.post('/api/agent/chat', async (req, res) => {
   const message = String(req.body.message || '').trim().slice(0, 10000);
-  if (!message) return res.status(400).json({ error: 'Message is required.' });
+  const image = req.body.imageDataUrl || null;
+  if (!message && !image) return res.status(400).json({ error: 'Message or image is required.' });
   try {
-    const result = await runAgent(message);
+    const result = await runAgent(message, image);
     if (pool) {
-      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message]);
+      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message || '[Image attached]']);
       await pool.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)', ['assistant', result.text, JSON.stringify(result.actions || [])]);
     }
     res.json({ reply: result.text, actions: result.actions || [] });
