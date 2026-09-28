@@ -14,13 +14,13 @@ test('deleteHolding only removes manual holdings', async () => {
   }};
   const result = await deleteHolding(pool, 42);
   assert.deepEqual(result, { ok: true });
-  assert.match(calls[0].sql, /sources*=s*'manual'/i);
+  assert.match(calls[0].sql, /source\s*=\s*'manual'/i);
   assert.deepEqual(calls[0].params, [42]);
 });
 
 test('deleteManualHoldings targets manual rows only and returns count', async () => {
   const pool = { query: async (sql) => {
-    assert.match(sql, /sources*=s*'manual'/i);
+    assert.match(sql, /source\s*=\s*'manual'/i);
     return { rowCount: 3 };
   }};
   assert.deepEqual(await deleteManualHoldings(pool), { ok: true, deleted: 3 });
