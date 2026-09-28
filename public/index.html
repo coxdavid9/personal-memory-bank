@@ -33,7 +33,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
 .approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}
 .approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
-.composer{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(calc(100% - 36px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1}
+.image-preview{display:none;align-items:center;gap:8px;padding:7px 0}.image-preview img{width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #d0d5dd}.image-preview .muted{font-size:12px;flex:1}.composer{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(calc(100% - 36px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1}
 .input,select,button{font:inherit}.input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px}
 .btn{border:0;border-radius:11px;padding:10px 14px;font-weight:700;cursor:pointer;background:#172033;color:#fff}.btn.secondary{background:#eef2f6;color:#172033}.btn.small{padding:8px 11px;font-size:12px}
 .quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.quick button{font-size:12px;padding:8px 10px}
@@ -73,7 +73,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
     <button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button>
     <button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button>
   </div>
-  <div class="composer"><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*" style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" onclick="document.getElementById('imageFile').click()">📎 Image</button><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
 </section>
 </div>
 </main>
@@ -88,11 +88,44 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 </div>
 <script>
 let messages=[];
+let selectedImageDataUrl=null;
 let chatSyncTimer=null;
 let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/\[([^\]]{1,160})\]\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g,(match,prefix,url)=>{const clean=url.replace(/[.,]$/,'');return prefix+'<a href="'+clean+'" target="_blank" rel="noopener noreferrer">'+clean+'</a>'});return rendered.replace(/\n/g,'<br>')}function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=renderContent(m.content);const bubble='<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+rendered+'<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage('+i+')">Copy</button></div></div>';const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
+function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/\[([^\]]{1,160})\]\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g,(match,prefix,url)=>{const clean=url.replace(/[.,]$/,'');return prefix+'<a href="'+clean+'" target="_blank" rel="noopener noreferrer">'+clean+'</a>'});return rendered.replace(/\n/g,'<br>')}function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=renderContent(m.content);const imageHtml=m.image?'<div style="margin-bottom:8px"><img src="'+m.image+'" alt="Attached image" style="display:block;max-width:min(520px,100%);max-height:420px;border-radius:10px"></div>':'';const bubble='<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+imageHtml+rendered+'<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage('+i+')">Copy</button></div></div>';const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
+async function handleImageSelected(event){
+  const file=event.target.files?.[0];
+  if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file.');return;}
+  try{
+    const dataUrl=await resizeImageForAgent(file);
+    selectedImageDataUrl=dataUrl;
+    document.getElementById('imagePreviewImg').src=dataUrl;
+    document.getElementById('imagePreview').style.display='flex';
+  }catch(e){alert(e.message||'Unable to prepare image.');clearImage();}
+}
+function resizeImageForAgent(file){return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onerror=()=>reject(new Error('Unable to read image.'));
+  reader.onload=()=>{
+    const img=new Image();
+    img.onerror=()=>reject(new Error('Unable to read image.'));
+    img.onload=()=>{
+      const max=1600;
+      const scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+      canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      resolve(canvas.toDataURL('image/jpeg',0.82));
+    };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+});}
+function clearImage(){selectedImageDataUrl=null;const input=document.getElementById('imageFile');if(input)input.value='';document.getElementById('imagePreview').style.display='none';document.getElementById('imagePreviewImg').removeAttribute('src');}
 async function copyMessage(index){const textToCopy=messages[index]?.content||'';try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
 function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
 function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
@@ -143,7 +176,7 @@ async function load(){
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
-async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages(true)}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages(true)}}
+async function send(){const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;messages.push({role:'user',content:text||'Please analyze this image.',image});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages(true)}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages(true)}}
 function quick(text){document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
 
