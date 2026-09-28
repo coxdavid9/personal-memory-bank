@@ -328,7 +328,11 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
 
     const toolCalls = (data.output || []).filter(item => item.type === 'function_call');
     if (!toolCalls.length) {
-      const text = String(data.output_text || '').trim();
+      const text = data.output_text || (data.output || [])
+        .flatMap(item => item.content || [])
+        .map(part => part.text || '')
+        .join('')
+        .trim();
       if (!text) throw new Error('Specialist agent returned no text.');
       return text;
     }
