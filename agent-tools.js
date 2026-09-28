@@ -82,7 +82,7 @@ const calendarEventTool = {
 const jobHistoryTool = {
   type: 'function',
   name: 'get_job_application_history',
-  description: 'Retrieve David's tracked job applications and rejections so live job searches can exclude roles he already applied to or rejected. Use before evaluating live jobs.',
+  description: "Retrieve David's tracked job applications and rejections so live job searches can exclude roles he already applied to or rejected. Use before evaluating live jobs.",
   strict: true,
   parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }
 };
