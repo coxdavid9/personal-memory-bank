@@ -31,5 +31,8 @@ jobs:
           node --check market.js
           node --check caldav.js
 
+      - name: Browser script syntax
+        run: node -e "const fs=require('fs'); const html=fs.readFileSync('public/index.html','utf8'); const js=html.match(/<script>([\\s\\S]*?)<\\/script>/); if(!js) throw new Error('Browser script not found'); new Function(js[1]);"
+
       - name: Test suite
         run: npm test
