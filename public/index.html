@@ -84,6 +84,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 let messages=[];
 let selectedImageDataUrl=null;
 let chatSyncTimer=null;
+let sendInFlight=false;
 let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
@@ -149,7 +150,8 @@ async function syncChat(){
  try{
    const history=await api('/api/agent/messages');
    const serverMessages=history.messages||[];
-   const pending=messages.filter(m=>m.id==null || m.id<0);
+   const serverKeys=new Set(serverMessages.map(m=>String(m.role)+'::'+String(m.content||'')));
+   const pending=messages.filter(m=>(m.id==null || m.id<0) && !serverKeys.has(String(m.role)+'::'+String(m.content||'')));
    const nextMessages=[...serverMessages,...pending];
    const changed=nextMessages.length!==messages.length||nextMessages.some((m,i)=>m.id!==messages[i]?.id||m.content!==messages[i]?.content);
    messages=nextMessages;
@@ -169,7 +171,7 @@ async function load(){
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
-async function send(){const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;messages.push({role:'user',content:text||'Please analyze this image.',image});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages(true)}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages(true)}}
+async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{sendInFlight=false}}
 function quick(text){document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
 
