@@ -97,8 +97,28 @@ const delegateTeamTool = {
   }
 };
 
-function buildAgentTools() {
-  return [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
+const JOB_SKILLS = Object.freeze({
+  general: ['save_memory','get_personal_context','get_portfolio_summary'],
+  portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding'],
+  calendar: ['save_memory','get_personal_context','create_calendar_event'],
+  engineering: ['save_memory','get_personal_context','delegate_to_team'],
+  business: ['save_memory','get_personal_context','delegate_to_team'],
+  product: ['save_memory','get_personal_context','delegate_to_team']
+});
+
+function inferJob(message = '') {
+  const text = String(message).toLowerCase();
+  if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
+  if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
+  if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
+  if (/customer|revenue|cost|business|sales|operations/.test(text)) return 'business';
+  return 'general';
+}
+
+function buildAgentTools({ job = 'general' } = {}) {
+  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, delegateTeamTool];
+  const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
+  return all.filter(tool => allowed.has(tool.name));
 }
 
 async function executeAgentTool(name, args, deps) {
@@ -204,4 +224,4 @@ async function executeAgentTool(name, args, deps) {
   return { ok: false, error: `Unknown agent tool: ${name}` };
 }
 
-module.exports = { buildAgentTools, executeAgentTool };
+module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool };
