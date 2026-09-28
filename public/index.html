@@ -24,10 +24,10 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .approval-bar h2{margin:0 0 8px;font-size:15px}.approval-bar .memory{background:#fffaf0}
 .grid{display:block}
 .card{background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:18px;box-shadow:0 5px 18px #1018280a}
-.chat{height:min(730px,calc(100dvh - 175px));min-height:540px;display:flex;flex-direction:column;overflow:hidden}
+.chat{display:flex;flex-direction:column}
 .chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
 .chat h2{margin:0 0 5px}.muted{color:#667085;font-size:13px}
-.messages{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px 2px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.messages{padding:8px 2px}
 .bubble{max-width:88%;padding:11px 13px;border-radius:14px;margin:9px 0;white-space:pre-wrap;line-height:1.45;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 .user{margin-left:auto;background:#172033;color:#fff;border-bottom-right-radius:5px}.assistant{background:#f2f4f7;border-bottom-left-radius:5px}
 .action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
@@ -47,7 +47,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .section{margin-top:16px}
 @media(max-width:800px){
  main{padding:10px}.top{padding:8px 2px}.top h1{font-size:20px}.top p{font-size:12px}.top .btn{padding:8px 10px}
- .chat{height:calc(100dvh - 150px);min-height:500px;max-height:calc(100dvh - 150px);padding:14px}
+ .chat{padding:14px}
  .chat-head{display:block}.chat-head .btn{margin-top:8px}.bubble{max-width:92%}.approval-bar{padding:10px}
 }
 </style>
@@ -91,7 +91,7 @@ let chatSyncTimer=null;
 let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=el.scrollHeight-el.scrollTop-el.clientHeight;const stickToBottom=forceBottom||distanceFromBottom<40;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=esc(m.content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');const bubble=`<div class="bubble ${m.role==='user'?'user':'assistant'}">${rendered}<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage(${i})">Copy</button></div></div>`;const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)el.scrollTop=el.scrollHeight}
+function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=esc(m.content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');const bubble=`<div class="bubble ${m.role==='user'?'user':'assistant'}">${rendered}<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage(${i})">Copy</button></div></div>`;const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
 async function copyMessage(index){const textToCopy=messages[index]?.content||'';try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
 function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
 function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
