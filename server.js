@@ -9,7 +9,7 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary } = require('./portf
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
-const { initPolicyDb } = require('./policy');
+const { initPolicyDb, getApproval, decideApproval, auditToolCall } = require('./policy');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -458,6 +458,59 @@ app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(r
 
 app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
+});
+
+app.get('/api/approvals', async (req, res) => {
+  if (!pool) return res.json({ approvals: [] });
+  try {
+    const { rows } = await pool.query(`SELECT id, created_at AS "createdAt", expires_at AS "expiresAt", run_id AS "runId", skill, args, status, decided_at AS "decidedAt", decision FROM tool_approvals WHERE status='pending' ORDER BY created_at ASC`);
+    for (const approval of rows) if (new Date(approval.expiresAt).getTime() <= Date.now()) {
+      await pool.query('UPDATE tool_approvals SET status=\'expired\', decided_at=NOW(), decision=\'timeout\' WHERE id=$1 AND status=\'pending\'', [approval.id]);
+      approval.status = 'expired';
+      approval.decision = 'timeout';
+    }
+    res.json({ approvals: rows.filter(row => row.status === 'pending') });
+  } catch (err) { res.status(500).json({ error: 'Unable to load approvals.' }); }
+});
+
+app.post('/api/approvals/:id/decision', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Persistent storage is not configured yet.' });
+  try {
+    const id = Number(req.params.id);
+    const decision = String(req.body.decision || '').toLowerCase();
+    const current = await getApproval(pool, id);
+    if (!current) return res.status(404).json({ error: 'Approval not found.' });
+    if (decision === 'deny') {
+      const result = await decideApproval(pool, id, 'deny');
+      return res.json(result);
+    }
+    if (decision !== 'approve') return res.status(400).json({ error: 'Decision must be approve or deny.' });
+    const result = await decideApproval(pool, id, 'approve');
+    if (!result.ok) return res.status(409).json(result);
+
+    const actions = [];
+    const execution = await executeAgentTool(current.skill, current.args, {
+      pool,
+      hasEmailReminders,
+      hasNtfyReminders,
+      scheduleReminderEmail,
+      scheduleReminderNtfy,
+      getAgentContext,
+      recordHolding,
+      getPortfolioSummary,
+      caldav,
+      delegateToTeam,
+      callSpecialist,
+      onAction: action => actions.push(action),
+      runId: current.runId,
+      skipPolicy: true
+    });
+    await auditToolCall(pool, { runId: current.runId, skill: current.skill, tier: 'ask', decision: 'approved_execute', args: current.args, durationMs: 0 });
+    res.json({ ok: true, approval: result.approval, execution, actions });
+  } catch (err) {
+    console.error('Approval execution failed:', err);
+    res.status(500).json({ error: err.message || 'Unable to execute approved action.' });
+  }
 });
 
 app.get('/api/agent/messages', async (req, res) => {
