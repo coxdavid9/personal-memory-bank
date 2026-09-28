@@ -6,15 +6,15 @@
 <meta name="theme-color" content="#172033">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Personal Agent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-<title>David's Personal Agent</title>
+<title>Jarvis</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:0;background:linear-gradient(180deg,#f7f9fc 0%,#eef2f7 100%);color:#172033}
 main{max-width:1180px;margin:0 auto;padding:18px}
-.topbar{background:linear-gradient(120deg,#141b30 0%,#232a4d 60%,#3b2a6e 100%);border-radius:22px;padding:20px 24px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 14px 34px #141b3048;margin-bottom:14px;position:sticky;top:0;z-index:14;overflow:hidden}
+.topbar{background:linear-gradient(120deg,#141b30 0%,#232a4d 60%,#3b2a6e 100%);border-radius:22px;padding:20px 24px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 14px 34px #141b[...]
 .topbar::after{content:"";position:absolute;right:-60px;top:-60px;width:240px;height:240px;background:radial-gradient(circle,#8b7cf659,transparent 70%);pointer-events:none}
 .orb{width:52px;height:52px;border-radius:16px;flex-shrink:0;overflow:hidden;box-shadow:0 6px 18px #6d28d980}
 .orb img{width:100%;height:100%;object-fit:cover;display:block}
@@ -29,30 +29,30 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .grid{display:block}.card{background:#fff;border:1px solid #e9ecf4;border-radius:22px;padding:18px;box-shadow:0 10px 30px #17203312}
 .chat{display:flex;flex-direction:column;padding-bottom:92px}.chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
 .chat-head h2{margin:0 0 5px;font-size:19px;font-weight:800;letter-spacing:-.01em}.muted{color:#667085;font-size:13px}.messages{padding:8px 2px}
-.bubble{max-width:82%;padding:13px 16px;border-radius:18px;margin:8px 0;white-space:pre-wrap;line-height:1.55;font-size:14.5px;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.bubble{max-width:82%;padding:13px 16px;border-radius:18px;margin:8px 0;white-space:pre-wrap;line-height:1.55;font-size:14.5px;-webkit-user-select:text;user-select:text;-webkit-touch-callout:defau[...]
 .user{margin-left:auto;background:linear-gradient(135deg,#2b3358,#172033);color:#fff;border-bottom-right-radius:6px;box-shadow:0 6px 16px #17203338}
 .assistant{background:#f7f8fc;border:1px solid #e9ecf4;color:#2a3049;border-bottom-left-radius:6px}.assistant strong{color:#172033}.assistant a{color:#4338ca}
-.bubble .btn.secondary{font-size:11.5px;padding:5px 11px;border:1px solid #e2e5ef;background:#fff;color:#667085;border-radius:8px;box-shadow:none}.bubble .btn.secondary:hover{border-color:#b9b3f0;color:#4338ca}
+.bubble .btn.secondary{font-size:11.5px;padding:5px 11px;border:1px solid #e2e5ef;background:#fff;color:#667085;border-radius:8px;box-shadow:none}.bubble .btn.secondary:hover{border-color:#b9b3f0;[...]
 .action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
-.approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}.approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
-.image-preview{display:none;align-items:center;gap:8px;padding:7px 0;width:100%}.image-preview img{width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #d0d5dd}.image-preview .muted{font-size:12px;flex:1}
-.composer{position:fixed;left:50%;bottom:0;flex-wrap:wrap;transform:translateX(-50%);width:min(calc(100% - 36px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1}
-.input,select,button{font:inherit}.input{width:100%;padding:15px 18px;border:1.5px solid #e2e5ef;border-radius:16px;background:#fafbfe;font-size:14.5px}.input:focus{outline:none;border-color:#8b7cf6;background:#fff;box-shadow:0 0 0 4px #8b7cf626}
-.btn{border:0;border-radius:14px;padding:11px 18px;font-weight:800;cursor:pointer;background:linear-gradient(120deg,#6d28d9,#4c1d95);color:#fff;box-shadow:0 8px 20px #6d28d959;font-family:inherit}.btn:hover{filter:brightness(1.07)}
+.approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}.approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7e[...]
+.image-preview{display:none;align-items:center;gap:8px;padding:7px 0;width:100%}.image-preview img{width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #d0d5dd}.image-preview[...]
+.composer{position:fixed;left:50%;bottom:0;flex-wrap:wrap;transform:translateX(-50%);width:min(calc(100% - 36px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inse[...]
+.input,select,button{font:inherit}.input{width:100%;padding:15px 18px;border:1.5px solid #e2e5ef;border-radius:16px;background:#fafbfe;font-size:14.5px}.input:focus{outline:none;border-color:#8b7c[...]
+.btn{border:0;border-radius:14px;padding:11px 18px;font-weight:800;cursor:pointer;background:linear-gradient(120deg,#6d28d9,#4c1d95);color:#fff;box-shadow:0 8px 20px #6d28d959;font-family:inherit}[...]
 .btn.secondary{background:#eef2f6;color:#172033}.btn.small{padding:8px 11px;font-size:12px}
-.quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.quick .btn.secondary{background:#eef0fe;color:#4338ca;border:1px solid #dfe3fb;border-radius:999px;font-size:12.5px;padding:9px 15px;box-shadow:none}.quick .btn.secondary:hover{background:#e2e6fd}
+.quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.quick .btn.secondary{background:#eef0fe;color:#4338ca;border:1px solid #dfe3fb;border-radius:999px;font-size:12.5px;padding:9px 15px;box[...]
 .memory{border:1px solid #e4e7ec;border-radius:10px;padding:10px;margin:7px 0}.memory small{color:#667085}
-.drawer{position:fixed;inset:0;background:#10182866;z-index:20;display:flex;justify-content:flex-end}.drawer.hidden{display:none}.drawer-panel{width:min(430px,92vw);height:100%;background:#f7f9fc;padding:18px;overflow:auto;box-shadow:-12px 0 30px #10182820}
-.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.drawer-head h2{margin:0}.drawer-section{margin-bottom:12px}.drawer-section .card{margin-top:8px}.drawer-section h3{margin:0 0 7px;font-size:14px}
-.cap{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin:9px 0;background:#fff}.cap strong{display:block}.badge{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:99px;background:#ecfdf3;color:#067647;font-size:11px}.section{margin-top:16px}
-@media(max-width:800px){main{padding:10px}.topbar{padding:16px 18px;border-radius:18px}.title-block h1{font-size:18px}.chat{padding:14px;padding-bottom:92px}.composer{width:calc(100% - 20px);padding-bottom:calc(10px + env(safe-area-inset-bottom))}.chat-head{display:block}.chat-head .btn{margin-top:8px}.bubble{max-width:92%}.approval-bar{padding:10px}}
+.drawer{position:fixed;inset:0;background:#10182866;z-index:20;display:flex;justify-content:flex-end}.drawer.hidden{display:none}.drawer-panel{width:min(430px,92vw);height:100%;background:#f7f9fc;[...]
+.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.drawer-head h2{margin:0}.drawer-section{margin-bottom:12px}.drawer-section .card{margin-top:8px}.draw[...]
+.cap{border:1px solid #e4e7ec;border-radius:12px;padding:12px;margin:9px 0;background:#fff}.cap strong{display:block}.badge{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:99px;b[...]
+@media(max-width:800px){main{padding:10px}.topbar{padding:16px 18px;border-radius:18px}.title-block h1{font-size:18px}.chat{padding:14px;padding-bottom:92px}.composer{width:calc(100% - 20px);paddi[...]
 </style>
 </head>
 <body>
 <main>
 <header class="topbar">
   <div class="orb"><img src="/icons/IMG_9013.jpeg" alt="Personal Agent"></div>
-  <div class="title-block"><h1>David's Personal Agent</h1><p>Your private AI workspace.</p></div>
+  <div class="title-block"><h1>Jarvis</h1><p>Your private AI workspace.</p></div>
   <div class="top-actions"><button class="ghost-btn" onclick="toggleDrawer(true)">☰ More</button><button class="ghost-btn" onclick="logout()">Sign out</button></div>
 </header>
 <section id="approvalBar" class="approval-bar" style="display:none"><div id="approvals"></div></section>
@@ -67,7 +67,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
     <button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button>
     <button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button>
   </div>
-  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*" style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" onclick="document.getElementById('imageFile').click()">📎 Image</button><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn second[...]
 </section>
 </div>
 </main>
@@ -77,7 +77,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
     <div class="drawer-section"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
     <div class="drawer-section"><h3>Capabilities</h3><section class="card"><div id="caps" class="muted">Loading...</div></section></div>
     <div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div>
-    <div class="drawer-section"><section class="card"><strong>Memory</strong><div class="muted" style="margin-top:6px">Memory is handled through the conversation. You don't need to maintain a separate memory list here.</div></section></div>
+    <div class="drawer-section"><section class="card"><strong>Memory</strong><div class="muted" style="margin-top:6px">Memory is handled through the conversation. You don't need to maintain a sepa[...]
   </aside>
 </div>
 <script>
@@ -85,9 +85,9 @@ let messages=[];
 let selectedImageDataUrl=null;
 let chatSyncTimer=null;
 let chatSyncBusy=false;
-async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
+async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)t[...]
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/\[([^\]]{1,160})\]\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g,(match,prefix,url)=>{const clean=url.replace(/[.,]$/,'');return prefix+'<a href="'+clean+'" target="_blank" rel="noopener noreferrer">'+clean+'</a>'});return rendered.replace(/\n/g,'<br>')}function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=renderContent(m.content);const imageHtml=m.image?'<div style="margin-bottom:8px"><img src="'+m.image+'" alt="Attached image" style="display:block;max-width:min(520px,100%);max-height:420px;border-radius:10px"></div>':'';const bubble='<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+imageHtml+rendered+'<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage('+i+')">Copy</button></div></div>';const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
+function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url[...]
 async function handleImageSelected(event){
   const file=event.target.files?.[0];
   if(!file)return;
@@ -119,16 +119,16 @@ function resizeImageForAgent(file){return new Promise((resolve,reject)=>{
   };
   reader.readAsDataURL(file);
 });}
-function clearImage(){selectedImageDataUrl=null;const input=document.getElementById('imageFile');if(input)input.value='';document.getElementById('imagePreview').style.display='none';document.getElementById('imagePreviewImg').removeAttribute('src');}
-async function copyMessage(index){const textToCopy=messages[index]?.content||'';try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
-function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
-function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
-function actionHtml(action){if(!action)return '';if(action.type==='calendar.create_event')return calendarActionHtml(action);if(action.type==='tool.approval'){const preview=action.preview?.diff?`<details style="margin-top:10px"><summary>View proposed change</summary><pre class="approval-preview">${esc(action.preview.diff)}</pre></details>`:'';return `<div class="action-card"><strong>Approval required</strong><span class="muted">${esc(action.skill)} · expires ${esc(new Date(action.expiresAt).toLocaleTimeString())}</span>${preview}<div class="approval-actions"><button class="btn" onclick="decideApproval(${Number(action.approvalId)},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${Number(action.approvalId)},'deny')">Deny</button></div></div>`}return ''}
-async function decideApproval(id,decision){try{const data=await api(`/api/approvals/${id}/decision`,{method:'POST',body:JSON.stringify({decision})});messages.push({role:'assistant',content:decision==='approve'?'Approved. The agent executed the action.':'Denied. The agent did not execute the action.',actions:data.actions||[]});renderMessages();loadApprovals()}catch(e){alert(e.message)}}
-async function loadApprovals(){try{const data=await api('/api/approvals');const el=document.getElementById('approvals');el.innerHTML=(data.approvals||[]).length?data.approvals.map(a=>`<div class="memory"><strong>${esc(a.skill)}</strong><br><span class="muted">Expires ${esc(new Date(a.expiresAt).toLocaleString())}</span><div class="approval-actions"><button class="btn" onclick="decideApproval(${a.id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${a.id},'deny')">Deny</button></div></div>`).join(''):'<div class="muted">Nothing waiting for approval.</div>'}catch(e){document.getElementById('approvals').innerHTML='<div class="muted">'+esc(e.message)+'</div>'}}
+function clearImage(){selectedImageDataUrl=null;const input=document.getElementById('imageFile');if(input)input.value='';document.getElementById('imagePreview').style.display='none';document.getE[...]
+async function copyMessage(index){const textToCopy=messages[index]?.content||'';try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta[...]
+function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/[...]
+function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start[...]
+function actionHtml(action){if(!action)return '';if(action.type==='calendar.create_event')return calendarActionHtml(action);if(action.type==='tool.approval'){const preview=action.preview?.diff?`<[...]
+async function decideApproval(id,decision){try{const data=await api(`/api/approvals/${id}/decision`,{method:'POST',body:JSON.stringify({decision})});messages.push({role:'assistant',content:decisi[...]
+async function loadApprovals(){try{const data=await api('/api/approvals');const el=document.getElementById('approvals');el.innerHTML=(data.approvals||[]).length?data.approvals.map(a=>`<div class=[...]
 function icsEscape(value){return String(value||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n')}
-function icsDate(iso){const d=new Date(iso);const pad=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`}
-function addToCalendar(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});window.location.href='/api/calendar.ics?'+params.toString()}
+function icsDate(iso){const d=new Date(iso);const pad=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getU[...]
+function addToCalendar(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});window.loca[...]
 function money(v){return Number(v||0).toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0})}
 function renderPortfolio(p){
   const el=document.getElementById('portfolio');
@@ -138,10 +138,10 @@ function renderPortfolio(p){
   const holdings=p.holdings.map(h=>{
     const value=Number.isFinite(Number(h.value))?money(h.value):'Value unavailable';
     const price=Number.isFinite(Number(h.price))?money(h.price):'price unavailable';
-    return `<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+price+' · ':''}${value} · ${esc(h.source)}</span></div>`;
+    return `<div class="memory"><strong>${esc(h.ticker||h.account)}</strong><br><span class="muted">${h.ticker&&h.shares!=null?h.shares+' shares · '+price+' · ':''}${value} · ${esc(h.source)}<[...]
   }).join('');
   const completeness=p.totalIncomplete?' · total is incomplete':'';
-  el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}${completeness}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
+  el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote[...]
 }
 async function syncChat(){
  if(chatSyncBusy)return;
@@ -161,15 +161,15 @@ async function load(){
  await Promise.all([
    api('/api/portfolio').then(renderPortfolio).catch(e=>setError('portfolio',e)),
    api('/api/agent/context').then(ctx=>{
-     document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');
+     document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c[...]
      document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
    }).catch(e=>{setError('caps',e);setError('projects',e)}),
-   api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages(true)}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
+   api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages(true)}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('be[...]
    loadApprovals().catch(e=>setError('approvals',e))
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
-async function send(){const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;messages.push({role:'user',content:text||'Please analyze this image.',image});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages(true)}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages(true)}}
+async function send(){const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;messages.push({role:'user',content:text||'Ple[...]
 function quick(text){document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
 
