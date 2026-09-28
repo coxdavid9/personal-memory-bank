@@ -98,7 +98,23 @@ async function getPortfolioSummary(pool) {
       change=quote.change;
       changePct=quote.changePct;
       if (quote.stale) stale=true;
-      value=Number(row.shares)*Number(price || 0);
+      if (Number.isFinite(Number(price))) {
+        value=Number(row.shares)*Number(price);
+      } else {
+        const snapshot = await pool.query(
+          `SELECT price FROM portfolio_snapshots
+           WHERE account=$1 AND ticker=$2 AND price IS NOT NULL
+           ORDER BY as_of DESC, id DESC LIMIT 1`,
+          [row.account,row.ticker]
+        );
+        const snapshotPrice = Number(snapshot.rows[0]?.price);
+        if (Number.isFinite(snapshotPrice)) {
+          price=snapshotPrice;
+          value=Number(row.shares)*snapshotPrice;
+        } else {
+          value=null;
+        }
+      }
     } else if (row.ticker && row.balance != null) {
       value=Number(row.balance);
     }
@@ -108,11 +124,13 @@ async function getPortfolioSummary(pool) {
       price, change, changePct, value, source:row.source, updatedAt:row.updated_at
     });
   }
-  const totalValue=holdings.reduce((sum,h)=>sum+h.value,0);
+  const totalValue=holdings.reduce((sum,h)=>sum+(Number.isFinite(Number(h.value)) ? Number(h.value) : 0),0);
+  const totalIncomplete=holdings.some(h=>!Number.isFinite(Number(h.value)));
   const accountsMap=new Map();
   for(const h of holdings){
     const current=accountsMap.get(h.account)||{account:h.account,value:0};
-    current.value+=h.value; accountsMap.set(h.account,current);
+    if (Number.isFinite(Number(h.value))) current.value+=Number(h.value);
+    accountsMap.set(h.account,current);
   }
   const accounts=[...accountsMap.values()].map(a=>({...a,allocationPct:totalValue?((a.value/totalValue)*100):0}));
   const today=new Date().toISOString().slice(0,10);
@@ -123,7 +141,7 @@ async function getPortfolioSummary(pool) {
   const dayChangePct=priorValue?((dayChange/priorValue)*100):null;
   for(const h of holdings) h.allocationPct=totalValue?((h.value/totalValue)*100):0;
   const connections=await pool.query(`SELECT institution_name,status,last_sync FROM plaid_items ORDER BY institution_name`);
-  return { totalValue, dayChange, dayChangePct, accounts, holdings, stale, connections:connections.rows, asOf:today };
+  return { totalValue, totalIncomplete, dayChange, dayChangePct, accounts, holdings, stale, connections:connections.rows, asOf:today };
 }
 
 module.exports={initPortfolioDb,recordHolding,getPortfolioSummary};
