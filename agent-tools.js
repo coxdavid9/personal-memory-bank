@@ -117,6 +117,22 @@ const saveJobApplicationTool = {
   }
 };
 
+const deleteHoldingTool = {
+  type: 'function',
+  name: 'delete_holding',
+  description: 'Delete a manual investment holding by its id, or all manual holdings at once. Use when David asks to remove portfolio entries. Never delete plaid-synced holdings.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      holding_id: { type: ['number','null'], description: 'Holding id to delete, or null to delete all manual holdings.' },
+      delete_all_manual: { type: 'boolean', description: 'Set true to delete every manual holding.' }
+    },
+    required: ['delete_all_manual'],
+    additionalProperties: false
+  }
+};
+
 const delegateTeamTool = {
   type: 'function',
   name: 'delegate_to_team',
@@ -138,7 +154,7 @@ const delegateTeamTool = {
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
-  portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding'],
+  portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
@@ -156,7 +172,7 @@ function inferJob(message = '') {
 }
 
 function buildAgentTools({ job = 'general' } = {}) {
-  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool];
+  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const selected = all.filter(tool => allowed.has(tool.name));
   if (job === 'job_search') selected.push({ type: 'web_search_preview' });
@@ -198,6 +214,11 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'save_job_application') return run('save_job_application', () => deps.saveJobApplication(deps.pool, args));
 
   if (name === 'record_holding') return run('record_holding', () => deps.recordHolding(deps.pool, args));
+  if (name === 'delete_holding') {
+    if (args.delete_all_manual) return run('delete_holding', () => deps.deleteManualHoldings(deps.pool));
+    if (args.holding_id == null) return { ok:false, error:'Provide a holding id or set delete_all_manual to true.' };
+    return run('delete_holding', () => deps.deleteHolding(deps.pool, args.holding_id));
+  }
   if (name === 'get_portfolio_summary') return run('get_portfolio_summary', async () => ({ ok: true, portfolio: await deps.getPortfolioSummary(deps.pool) }));
 
   if (name === 'save_memory') {
