@@ -61,7 +61,7 @@ function authPage(message = '') {
 
 function requireAuth(req, res, next) {
   if (isAuthenticated(req)) return next();
-  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
+  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/api/webhooks/github' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
   return res.redirect('/login');
 }
@@ -150,6 +150,16 @@ async function initDb() {
   await initPortfolioAgentDb(pool);
   await initAgentTeamDb(pool);
   await initPolicyDb(pool);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS github_webhook_events (
+      delivery_id TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      event_name TEXT NOT NULL,
+      action TEXT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS github_webhook_events_created_idx ON github_webhook_events(created_at DESC)');
 
   const projects = [
     ['ClearCFO', 'AI-powered financial intelligence product. Keep project knowledge here; customer financial data stays in ClearCFO and is accessed through a controlled integration.', 'active'],
@@ -193,6 +203,23 @@ function emailHtml(memory) {
   const safePriority = String(memory.priority || 'Normal').replace(/[&<>\"']/g, '');
   const due = new Date(memory.due).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
   return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#20242a"><h2>🧠 Personal Agent</h2><p style="color:#667085">You asked me to bring this back to your attention.</p><div style="border:1px solid #e5e7eb;border-left:4px solid #f79009;border-radius:10px;padding:16px;margin:20px 0"><div style="font-size:12px;color:#667085;margin-bottom:8px">${safeType} · ${safePriority} · ${due}</div><div style="font-size:18px;font-weight:600">${safeText}</div></div><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px">Open Personal Agent</a></div>`;
+}
+
+async function sendAgentEmail(subject, text) {
+  if (!hasEmailReminders) return { sent: false, reason: 'email_not_configured' };
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+    body: JSON.stringify({
+      from: reminderFrom,
+      to: [process.env.REMINDER_EMAIL],
+      subject: String(subject).slice(0, 180),
+      text: String(text).slice(0, 10000)
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || data?.error || 'Unable to send agent email.');
+  return { sent: true, id: data.id || null };
 }
 
 async function scheduleReminderEmail(memory) {
@@ -452,6 +479,62 @@ app.get('/api/calendar.ics', (req, res) => {
   res.setHeader('Content-Disposition','inline; filename="personal-agent-event.ics"');
   res.setHeader('Cache-Control','no-store');
   res.send(lines.join('\r\n')+'\r\n');
+});
+
+app.post('/api/webhooks/github', async (req, res) => {
+  if (!githubWebhookSecret) return res.status(503).json({ error: 'GitHub webhook is not configured.' });
+  const signature = String(req.get('x-hub-signature-256') || '');
+  const expected = 'sha256=' + crypto.createHmac('sha256', githubWebhookSecret).update(req.rawBody || Buffer.from('')).digest('hex');
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expected);
+  if (!signature || sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return res.status(401).json({ error: 'Invalid webhook signature.' });
+
+  const deliveryId = String(req.get('x-github-delivery') || '');
+  const eventName = String(req.get('x-github-event') || '');
+  if (!deliveryId || !eventName) return res.status(400).json({ error: 'Missing GitHub webhook headers.' });
+
+  try {
+    if (pool) {
+      const inserted = await pool.query(
+        'INSERT INTO github_webhook_events(delivery_id,event_name,action,payload) VALUES($1,$2,$3,$4) ON CONFLICT(delivery_id) DO NOTHING RETURNING delivery_id',
+        [deliveryId, eventName, req.body?.action || null, JSON.stringify(req.body || {})]
+      );
+      if (!inserted.rowCount) return res.json({ ok: true, duplicate: true });
+    }
+
+    if (eventName === 'check_run' && req.body?.action === 'completed' && req.body?.check_run?.conclusion === 'failure') {
+      const check = req.body.check_run;
+      const pr = check.pull_requests?.[0]?.number;
+      const repo = req.body.repository?.full_name || process.env.GITHUB_REPO || 'coxdavid9/personal-memory-bank';
+      const subject = `CI failed on PR #${pr || '?'}`;
+      const text = `${subject} in ${repo}. Failing check: ${check.name || 'unknown'}. Open the Personal Agent to inspect the PR and logs.`;
+      const email = await sendAgentEmail(subject, text);
+      return res.json({ ok: true, notificationSent: email.sent });
+    }
+
+    if (eventName === 'push' && req.body?.ref === 'refs/heads/main' && pool) {
+      const head = req.body.head_commit;
+      if (head?.id) {
+        await pool.query(
+          'INSERT INTO memories(text,type,priority) VALUES($1,$2,$3)',
+          [`GitHub main changed: ${head.id.slice(0,12)} — ${String(head.message || '').split('\\n')[0].slice(0,300)}`, 'Work', 'Normal']
+        );
+      }
+    }
+
+    if (eventName === 'pull_request' && req.body?.action === 'closed' && req.body?.pull_request?.merged && pool) {
+      const pr = req.body.pull_request;
+      await pool.query(
+        'INSERT INTO memories(text,type,priority) VALUES($1,$2,$3)',
+        [`GitHub PR #${pr.number} merged: ${String(pr.title || '').slice(0,300)} — ${String(pr.merge_commit_sha || '').slice(0,12)}`, 'Work', 'Normal']
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('GitHub webhook processing failed:', err);
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  }
 });
 
 app.post('/api/internal/daily-portfolio', async (req, res) => {
