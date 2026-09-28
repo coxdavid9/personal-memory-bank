@@ -98,7 +98,7 @@ const delegateTeamTool = {
 };
 
 const JOB_SKILLS = Object.freeze({
-  general: ['save_memory','get_personal_context','get_portfolio_summary'],
+  general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
