@@ -21,3 +21,12 @@ test('router keeps engineering tools out of normal chat', () => {
   assert.ok(!names.includes('github_create_pr'));
   assert.ok(names.includes('delegate_to_team'));
 });
+
+
+test('image input validation accepts supported data URLs and rejects unsafe input', () => {
+  const { validateImageDataUrl } = require('../agent-tools');
+  const image = 'data:image/png;base64,iVBORw0KGgo=';
+  assert.equal(validateImageDataUrl(image), image);
+  assert.throws(() => validateImageDataUrl('https://example.com/image.png'), /Unsupported image/);
+  assert.throws(() => validateImageDataUrl('data:text/plain;base64,SGk='), /Unsupported image/);
+});
