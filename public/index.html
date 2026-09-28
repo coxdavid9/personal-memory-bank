@@ -24,7 +24,7 @@
 <section class="card"><h2>Portfolio</h2><div id="portfolio" class="muted">Loading...</div></section>
 <section class="card section"><h2>Capabilities</h2><div id="caps" class="muted">Loading...</div></section>
 <section class="card section"><h2>Projects</h2><div id="projects" class="muted">Loading...</div></section>
-<section class="card section"><h2>Pending approvals</h2><div id="approvals" class="muted">Loading...</div></section>\n<section class="card section"><h2>Memory</h2><div class="muted">Capture something you want me to remember.</div><textarea id="memoryText" class="input" style="margin-top:9px;min-height:85px" placeholder="Example: Follow up with the recruiter Friday."></textarea><div style="display:flex;gap:7px;margin-top:7px"><select id="memoryType" class="input"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select><button class="btn" onclick="saveMemory()">Remember</button></div></section>
+<section class="card section"><h2>Pending approvals</h2><div id="approvals" class="muted">Loading...</div></section><section class="card section"><h2>Memory</h2><div class="muted">Capture something you want me to remember.</div><textarea id="memoryText" class="input" style="margin-top:9px;min-height:85px" placeholder="Example: Follow up with the recruiter Friday."></textarea><div style="display:flex;gap:7px;margin-top:7px"><select id="memoryType" class="input"><option>Work</option><option>Personal</option><option>Idea</option><option>Follow-up</option><option>Learning</option></select><button class="btn" onclick="saveMemory()">Remember</button></div></section>
 </aside></div>
 </main>
 <script>
@@ -53,10 +53,17 @@ function renderPortfolio(p){
   el.innerHTML=`<div style="font-size:28px;font-weight:800;margin:7px 0">${money(p.totalValue)}</div><div class="muted">Day change ${day||'available after the first snapshot'}${p.stale?' · quote data is stale':''}${completeness}</div><div class="section"><strong>Accounts</strong>${accounts}</div><div class="section"><strong>Holdings</strong>${holdings}</div>`;
 }
 async function load(){
- try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`;
- const portfolio=await api('/api/portfolio');renderPortfolio(portfolio);const ctx=await api('/api/agent/context');document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
- const history=await api('/api/agent/messages');messages=history.messages||[];renderMessages();await loadApprovals();
- }catch(e){document.getElementById('status').innerHTML=`<div class="status">${esc(e.message)}</div>`}
+ const setError=(id,e)=>{document.getElementById(id).innerHTML='<div class="muted">Unable to load: '+esc(e.message)+'</div>'};
+ try{const s=await api('/api/status');document.getElementById('status').innerHTML=`<div class="status ${s.aiAgent?'good':''}">${s.aiAgent?'✓ AI agent connected':'AI agent is not connected yet'} · ${s.persistentStorage?'Persistent memory connected':'Memory database not connected'} · ${s.clearCfoConnected?'ClearCFO integration connected':'ClearCFO integration ready to connect'}</div>`}catch(e){document.getElementById('status').innerHTML='<div class="status">'+esc(e.message)+'</div>'}
+ await Promise.all([
+   api('/api/portfolio').then(renderPortfolio).catch(e=>setError('portfolio',e)),
+   api('/api/agent/context').then(ctx=>{
+     document.getElementById('caps').innerHTML=ctx.capabilities.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.description)}</span><br><span class="badge">${c.enabled?'Enabled':'Disabled'}</span></div>`).join('');
+     document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
+   }).catch(e=>{setError('caps',e);setError('projects',e)}),
+   api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages()}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
+   loadApprovals().catch(e=>setError('approvals',e))
+ ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
 async function send(){const input=document.getElementById('message'),text=input.value.trim();if(!text)return;messages.push({role:'user',content:text});input.value='';renderMessages();try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[]});renderMessages()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message});renderMessages()}}
