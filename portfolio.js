@@ -121,7 +121,8 @@ async function getPortfolioSummary(pool) {
     holdings.push({
       id:Number(row.id), account:row.account, ticker:row.ticker,
       shares:row.shares==null?null:Number(row.shares), balance:row.balance==null?null:Number(row.balance),
-      price, change, changePct, value, source:row.source, updatedAt:row.updated_at
+      price, change, changePct, value, quoteError: row.ticker && row.shares != null ? (price == null ? 'Quote unavailable.' : null) : null,
+      source:row.source, updatedAt:row.updated_at
     });
   }
   const totalValue=holdings.reduce((sum,h)=>sum+(Number.isFinite(Number(h.value)) ? Number(h.value) : 0),0);
@@ -133,8 +134,14 @@ async function getPortfolioSummary(pool) {
     accountsMap.set(h.account,current);
   }
   const accounts=[...accountsMap.values()].map(a=>({...a,allocationPct:totalValue?((a.value/totalValue)*100):0}));
-  const today=new Date().toISOString().slice(0,10);
-  const prior=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const dateInChicago = (date) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+  const today=dateInChicago(new Date());
+  const prior=dateInChicago(new Date(Date.now()-86400000));
   const snap=await pool.query(`SELECT COALESCE(SUM(value),0) AS value FROM portfolio_snapshots WHERE as_of=$1`,[prior]);
   const priorValue=Number(snap.rows[0]?.value||0);
   const dayChange=priorValue?totalValue-priorValue:null;
