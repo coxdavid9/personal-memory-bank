@@ -228,7 +228,7 @@ async function getAgentContext() {
   return { memories: memories.rows, projects: projects.rows, capabilities: capabilities.rows };
 }
 
-function agentSystemPrompt(context) {
+function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
 Architecture rules:
@@ -250,6 +250,14 @@ ${JSON.stringify(context.projects, null, 2)}
 
 Available capabilities:
 ${JSON.stringify(context.capabilities, null, 2)}
+
+Private internal AI team:
+${JSON.stringify(teamRoles, null, 2)}
+
+Recent team work:
+${JSON.stringify(recentTeamTasks, null, 2)}
+
+Team rules: The team is private to David. It is for building and operating David's projects, not for ClearCFO customers. Delegate concrete work to specialists instead of pretending you personally completed external actions.
 
 Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}`;
