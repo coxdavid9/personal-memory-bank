@@ -11,7 +11,7 @@ test('router sends calendar requests to calendar skills only', () => {
 test('router sends portfolio requests to portfolio skills', () => {
   assert.equal(inferJob('How is my Fidelity portfolio doing?'), 'portfolio');
   const names = buildAgentTools({ job: 'portfolio' }).map(tool => tool.name);
-  assert.deepEqual(names, ['save_memory','get_personal_context','get_portfolio_summary','record_holding']);
+  assert.deepEqual(names, ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding']);
 });
 
 test('router keeps engineering tools out of normal chat', () => {
