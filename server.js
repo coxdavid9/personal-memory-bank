@@ -839,13 +839,11 @@ app.patch('/api/projects/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid project id.' });
-    const current = await pool.query('SELECT id,name,description,status FROM agent_projects WHERE id=$1', [id]);
-    if (!current.rows[0]) return res.status(404).json({ error: 'Project not found.' });
-    const next = ({ active: 'paused', paused: 'done', done: 'active' })[current.rows[0].status] || 'active';
     const { rows } = await pool.query(
-      'UPDATE agent_projects SET status=$1,updated_at=NOW() WHERE id=$2 RETURNING id,name,description,status',
-      [next, id]
+      `UPDATE agent_projects SET status = CASE status WHEN 'active' THEN 'paused' WHEN 'paused' THEN 'done' WHEN 'done' THEN 'active' ELSE 'active' END, updated_at=NOW() WHERE id=$1 RETURNING id,name,description,status`,
+      [id]
     );
+    if (!rows[0]) return res.status(404).json({ error: 'Project not found.' });
     res.json(rows[0]);
   } catch (err) { console.error(err); res.status(400).json({ error: 'Unable to update project.' }); }
 });
