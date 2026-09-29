@@ -79,7 +79,7 @@ test('Jarvis identity is consistent across prompt and notification surfaces', ()
   assert.match(prompt, /You are Jarvis, David's personal AI agent\./);
   assert.match(prompt, /Your name is Jarvis\./);
   assert.match(prompt, /never 'Personal Agent'/);
-  assert.doesNotMatch(prompt, /Personal Agent(?!['-])/);
+  assert.equal((prompt.match(/Personal Agent/g) || []).length, 1);
   assert.match(reminder, /🧠 Jarvis/);
   assert.match(reminder, /Open Jarvis/);
   assert.doesNotMatch(reminder, /Personal Agent/);
