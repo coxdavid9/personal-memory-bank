@@ -6,7 +6,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const { MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, queryExcelFile, buildWorkbook, profileFile } = require('../excel');
 const { classifySkill, TIERS } = require('../policy');
-const { inferJob, buildAgentTools } = require('../agent-tools');
+const { inferJob, buildAgentTools, executeAgentTool } = require('../agent-tools');
 
 
 function assertTypedSchema(node, pathLabel = 'schema') {
@@ -97,4 +97,38 @@ test('Generated workbook is a real XLSX with multiple sheets', async () => {
   assert.deepEqual(wb.worksheets.map(s => s.name), ['Summary','Detail']);
   assert.equal(wb.getWorksheet('Summary').getCell('B2').value, 400);
   fs.rmSync(dir, { recursive:true, force:true });
+});
+
+test('excel_build executor wiring creates a generated workbook action', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'personal-agent-excel-executor-'));
+  const actions = [];
+  try {
+    const result = await executeAgentTool('excel_build', {
+      name: 'job-applications',
+      sheets: [
+        { name: 'Applications', headers: ['Company','Status'], rows: [['Nestlé','Applied'],['AerCap','Applied']] }
+      ]
+    }, {
+      pool: {},
+      excelUploadDir: dir,
+      skipPolicy: true,
+      buildExcelWorkbook: async (outputPath, spec) => buildWorkbook(outputPath, spec),
+      createExcelFile: async (pool, input) => ({
+        id: 123,
+        name: input.name,
+        size_bytes: input.sizeBytes,
+        kind: input.kind
+      }),
+      onAction: action => actions.push(action)
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.file.id, 123);
+    assert.equal(result.action.type, 'file_download');
+    assert.equal(result.action.fileId, 123);
+    assert.equal(result.action.name, 'job-applications.xlsx');
+    assert.equal(actions.length, 1);
+    assert.deepEqual(actions[0], result.action);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
