@@ -118,7 +118,7 @@ let sendInFlight=false;
 let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-let approvalStateLoaded=false; let pendingApprovalIds=new Set();
+let approvalStateLoaded=false; let pendingApprovalIds=new Set(); let decidedApprovals=new Map();
 function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/\[([^\]]{1,160})\]\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g,(match,prefix,url)=>{const clean=url.replace(/[.,]$/,'');return prefix+'<a href="'+clean+'" target="_blank" rel="noopener noreferrer">'+clean+'</a>'});return rendered.replace(/\n/g,'<br>')}function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=renderContent(m.content);const imageHtml=m.image?'<div style="margin-bottom:8px"><img src="'+m.image+'" alt="Attached image" style="display:block;max-width:min(520px,100%);max-height:420px;border-radius:10px"></div>':'';const bubble='<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+imageHtml+rendered+'<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage('+i+')">Copy</button></div></div>';const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
 async function attachImageFile(file){
   if(!file)return;
@@ -185,8 +185,13 @@ function actionHtml(action){
   const id=Number(action.approvalId);
   if(!approvalStateLoaded) return '';
   if(!pendingApprovalIds.has(id)){
-   const expired=action.expiresAt && new Date(action.expiresAt).getTime()<=Date.now();
-   return `<div class="action-card"><strong>${expired?'Expired':'Already decided'}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}</div>`;
+   const decided=decidedApprovals.get(id);
+   let label='Already decided';
+   if(decided?.status==='approved' || decided?.decision==='approve') label='Approved';
+   else if(decided?.status==='denied' || decided?.decision==='deny') label='Denied';
+   else if(decided?.status==='expired' || decided?.decision==='timeout') label='Expired — no decision made';
+   else if(action.expiresAt && new Date(action.expiresAt).getTime()<=Date.now()) label='Expired — no decision made';
+   return `<div class="action-card"><strong>${label}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}</div>`;
   }
   return `<div class="action-card"><strong>Approval required</strong><span class="muted">${esc(action.skill)} · expires ${esc(new Date(action.expiresAt).toLocaleTimeString())}</span>${preview}<div class="approval-actions"><button class="btn" onclick="decideApproval(${id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${id},'deny')">Deny</button></div></div>`;
  }
@@ -197,7 +202,9 @@ async function loadApprovals(){
  try{
   const data=await api('/api/approvals');
   const approvals=data.approvals||[];
+  const decided=data.decided||[];
   pendingApprovalIds=new Set(approvals.map(a=>Number(a.id)));
+  decidedApprovals=new Map(decided.map(a=>[Number(a.id),a]));
   approvalStateLoaded=true;
   const el=document.getElementById('approvals');
   el.innerHTML=approvals.length?approvals.map(a=>`<div class="memory"><strong>${esc(a.skill)}</strong><br><span class="muted">Expires ${esc(new Date(a.expiresAt).toLocaleString())}</span><div class="approval-actions"><button class="btn" onclick="decideApproval(${a.id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${a.id},'deny')">Deny</button></div></div>`).join(''):'<div class="muted">Nothing waiting for approval.</div>';
@@ -267,7 +274,11 @@ async function syncChat(){
    const nextMessages=[...serverMessages,...pending];
    const changed=nextMessages.length!==messages.length||nextMessages.some((m,i)=>m.id!==messages[i]?.id||m.content!==messages[i]?.content);
    messages=nextMessages;
-   if(changed)renderMessages();
+   if(changed){
+    renderMessages();
+    const hasApprovalAction=nextMessages.some(m=>(m.actions||[]).some(a=>a?.type==='tool.approval'));
+    if(hasApprovalAction){await loadApprovals().catch(()=>{});renderMessages();}
+   }
  }catch(e){}finally{chatSyncBusy=false;}
 }
 async function load(){
@@ -281,7 +292,7 @@ async function load(){
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
 function setWorking(active){document.getElementById('app')?.classList.toggle('working',active);const status=document.getElementById('statusLine');if(status)status.textContent=active?'Working':'Ready'}
-async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;setWorking(true);messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{sendInFlight=false;setWorking(false)}}
+async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;setWorking(true);messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await loadApprovals().catch(()=>{});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{sendInFlight=false;setWorking(false)}}
 function quick(text){document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
 
