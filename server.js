@@ -14,7 +14,6 @@ const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = r
 const { initJobSearchDb, getJobApplicationHistory, saveJobApplication, isDismissedJobText } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
-const { buildSuggestions } = require('./suggestions');
 const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -677,22 +676,6 @@ app.get('/api/team', async (req, res) => {
     console.error('Unable to load agent team:', err);
     res.status(500).json({ error: 'Unable to load agent team.' });
   }
-});
-
-app.get('/api/suggestions', async (req,res) => {
-  if (!pool) return res.json({ suggestions: [] });
-  try {
-    const [approvals, reminders, actionable] = await Promise.all([
-      pool.query("SELECT COUNT(*)::int AS count FROM tool_approvals WHERE status='pending' AND expires_at>NOW()"),
-      pool.query("SELECT COUNT(*)::int AS count FROM memories WHERE done=false AND due_at IS NOT NULL AND due_at >= CURRENT_DATE AND due_at < CURRENT_DATE + INTERVAL '1 day' AND LOWER(text) NOT LIKE '%stale%' AND LOWER(text) NOT LIKE '%ignore%' AND LOWER(text) NOT LIKE '%dismiss%' AND LOWER(text) NOT LIKE '%resolved%'"),
-      pool.query("SELECT COUNT(*)::int AS count FROM job_applications WHERE status NOT IN ('ignore','rejected')")
-    ]);
-    const approvalCount=approvals.rows[0]?.count||0;
-    const reminderCount=reminders.rows[0]?.count||0;
-    const actionableCount=(actionable.rows[0]?.count||0);
-    const hour=new Date().toLocaleString('en-US',{hour:'numeric',hour12:false,timeZone:'America/Chicago'});
-    res.json({suggestions:buildSuggestions({approvalCount,reminderCount,actionableCount,hour})});
-  } catch(err) { console.error('Suggestions failed:',err); res.status(500).json({error:'Unable to load suggestions.'}); }
 });
 
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
