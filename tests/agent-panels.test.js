@@ -114,3 +114,16 @@ test('Jarvis identity is consistent across prompt and notification surfaces', ()
   assert.match(toolsSource, /such as ClearCFO, Jarvis, Portfolio, or Job Search/);
   assert.doesNotMatch(toolsSource, /such as ClearCFO, Personal Agent, Portfolio, or Job Search/);
 });
+
+test('approval cards refresh after assistant approval actions arrive', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const sendStart = html.indexOf('async function send()');
+  const sendEnd = html.indexOf('function quick(', sendStart);
+  const sendSource = html.slice(sendStart, sendEnd);
+  assert.match(sendSource, /messages\.push\(\{role:'assistant'/);
+  assert.match(sendSource, /renderMessages\(true\);await loadApprovals\(\)\.catch\(\(\)=>\{\}\);renderMessages\(true\)/);
+  assert.match(html, /hasApprovalAction=nextMessages\.some/);
+  assert.match(html, /await loadApprovals\(\)\.catch\(\(\)=>\{\}\);renderMessages\(\)/);
+  assert.match(html, /decidedApprovals=new Map/);
+  assert.match(html, /Expired — no decision made/);
+});
