@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const { isDismissedJobText } = require('../job-search');
 const { buildSuggestions } = require('../suggestions');
 
@@ -17,7 +18,7 @@ test('suggestions never invent a dismissal as an actionable signal', () => {
 });
 
 test('server priority rules explicitly exclude dismissed jobs and require actionable verbs', () => {
-  const source = fs.readFileSync(require.resolve('../server'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(source, /status NOT IN \('ignore','rejected'\)/);
   assert.match(source, /use only context\.priorityContext as the candidate pool/);
   assert.match(source, /Never include "ignore X", "don't do Y", "X is stale"/);
