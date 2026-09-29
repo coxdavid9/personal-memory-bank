@@ -19,6 +19,18 @@ test('disabling a capability removes its tools from the built toolset', () => {
   assert.ok(tools.includes('save_memory'));
 });
 
+test('projects panel loads all statuses separately from active-only agent context', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(html, /api\\('\/api\/projects'\\)/);
+  assert.match(html, /projectData\.projects/);
+  assert.match(html, /badge/);
+  assert.match(html, /badge\.paused/);
+  assert.match(html, /badge\.done/);
+  assert.match(server, /SELECT \* FROM agent_projects ORDER BY name/);
+  assert.match(server, /WHERE status='active'/);
+});
+
 test('server only supplies active projects to agent context', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(source, /SELECT id, name, description, status FROM agent_projects WHERE status='active'/);
