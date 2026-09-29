@@ -16,7 +16,6 @@ const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill }
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 const { buildSuggestions } = require('./suggestions');
 const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
-
 const app = express();
 const port = Number(process.env.PORT) || 10000;
 const hasDatabase = Boolean(process.env.DATABASE_URL);
@@ -37,13 +36,11 @@ const renderOps = buildRenderClientFromEnv();
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 const renderServiceId = process.env.RENDER_SERVICE_ID || 'srv-da8pp1p5efls73e9beo0';
 ensureUploadDir();
-
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', authSecret).update(body).digest('base64url');
   return `${body}.${sig}`;
 }
-
 function validSession(token) {
   if (!authSecret || !token) return false;
   const [body, sig] = String(token).split('.');
@@ -55,11 +52,9 @@ function validSession(token) {
     return payload.exp > Date.now();
   } catch { return false; }
 }
-
 function isAuthenticated(req) {
   return validSession(req.headers.cookie?.match(/(?:^|;\\s*)pa_session=([^;]+)/)?.[1]);
 }
-
 function authPage(message = '') {
   const safe = String(message).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#172033"><title>Personal Agent — Sign in</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;margin:0;min-height:100vh;display:grid;place-items:center;color:#172033}.card{width:min(90%,380px);background:#fff;border:1px solid #e4e7ec;border-radius:18px;padding:28px;box-shadow:0 8px 30px #10182812}h1{margin:0 0 8px}.muted{color:#667085;font-size:14px;margin-bottom:20px}input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #d0d5dd;border-radius:10px;font:inherit;margin-bottom:10px}button{width:100%;padding:13px;border:0;border-radius:10px;background:#172033;color:#fff;font-weight:700;font:inherit}.error{color:#b42318;background:#fef3f2;padding:9px;border-radius:9px;margin-bottom:12px;font-size:13px}</style></head><body><main class="card"><h1>🧠 Personal Agent</h1><div class="muted">Private access</div>${safe?`<div class="error">${safe}</div>`:''}<form method="POST" action="/login"><input name="password" type="password" autocomplete="current-password" placeholder="Password" autofocus required><button>Sign in</button></form></main></body></html>`;
@@ -363,11 +358,7 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
 
     const toolCalls = (data.output || []).filter(item => item.type === 'function_call');
     if (!toolCalls.length) {
-      const text = data.output_text || (data.output || [])
-        .flatMap(item => item.content || [])
-        .map(part => part.text || '')
-        .join('')
-        .trim();
+      const text = data.output_text || (data.output || []).flatMap(item => item.content || []).map(part => part.text || '').join('').trim();
       if (!text) throw new Error('Specialist agent returned no text.');
       return text;
     }
@@ -430,10 +421,11 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   let totalBytes = 0;
   for (const id of ids) {
     const file = await getExcelFile(pool, id, 'source');
-    if (!file) throw new Error('One of the attached Excel files was not found or has expired.');
+    if (!file || !fs.existsSync(file.path)) throw new Error('One of the attached Excel files was not found or has expired.');
     totalBytes += Number(file.size_bytes || 0);
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('The attached files exceed the 100 MB total limit for one message.');
-    excelFiles.push({ id:file.id, name:file.name, size_bytes:Number(file.size_bytes), sheet_names:file.sheet_names, total_rows:file.total_rows });
+    const profile = await profileFile(file.path, file.name);
+    excelFiles.push({ id:file.id, name:file.name, size_bytes:Number(file.size_bytes), sheet_names:file.sheet_names, total_rows:file.total_rows, profile });
   }
   const teamRoles = getTeamRoles();
   const recentTeamTasks = await getRecentTeamTasks(pool, 12);
@@ -443,6 +435,7 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
     ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
     : String(message || '').trim().slice(0, 10000);
   if (!String(message || '').trim() && !image && !excelFiles.length) throw new Error('Message, image, or Excel file is required.');
+
   const input = [
     { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks, excelFiles) },
     ...recent.map(m => ({ role: m.role, content: m.content })),
@@ -456,16 +449,8 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   for (let turn = 0; turn < 4; turn += 1) {
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: openAIModel,
-        input: responseInput,
-        tools,
-        tool_choice: 'auto',
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({ model: openAIModel, input: responseInput, tools, tool_choice: 'auto' }),
     });
 
     const data = await response.json().catch(() => ({}));
@@ -481,17 +466,10 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
       if (!text) throw new Error('The AI agent returned no text.');
       return { text, actions };
     }
-
-    responseInput = [
-      ...responseInput,
-      ...(data.output || []),
-    ];
-
+    responseInput = [...responseInput, ...(data.output || [])];
     for (const call of toolCalls) {
       let args = {};
-      try { args = JSON.parse(call.arguments || '{}'); }
-      catch { args = {}; }
-
+      try { args = JSON.parse(call.arguments || '{}'); } catch {}
       const result = await executeAgentTool(call.name, args, {
         pool,
         hasEmailReminders,
@@ -499,13 +477,6 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
         scheduleReminderEmail,
         scheduleReminderNtfy,
         getAgentContext,
-        getExcelFile,
-        profileExcelFile: profileFile,
-        queryExcelFile,
-        buildExcelWorkbook: buildWorkbook,
-        createExcelFile,
-        deleteExcelFile,
-        excelUploadDir: UPLOAD_DIR,
         recordHolding,
         deleteHolding,
         deleteManualHoldings,
@@ -516,16 +487,18 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
         github,
         renderOps,
         delegateToTeam,
+        getExcelFile,
+        profileExcelFile: profileFile,
+        queryExcelFile,
+        buildExcelWorkbook: buildWorkbook,
+        deleteExcelFile,
+        createExcelFile,
+        excelUploadDir: UPLOAD_DIR,
         callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
-        onAction: (action) => actions.push(action),
+        onAction: action => actions.push(action),
         runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       });
-
-      responseInput.push({
-        type: 'function_call_output',
-        call_id: call.call_id,
-        output: JSON.stringify(result),
-      });
+      responseInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
 
@@ -806,43 +779,11 @@ app.get('/api/agent/messages', async (req, res) => {
   catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
 });
 
-app.post('/api/files', (req,res) => {
-  upload.array('files', MAX_FILES_PER_MESSAGE)(req,res, async err => {
-    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A file exceeds the 25 MB per-file limit.' : err.message || 'Unable to upload files.' });
-    const files = req.files || [];
-    if (!files.length) return res.status(400).json({ error:'No files were uploaded.' });
-    const spreadsheets = files.filter(f => isSpreadsheetName(f.originalname));
-    const total = files.reduce((n,f)=>n+Number(f.size||0),0);
-    if (total > MAX_TOTAL_BYTES) { await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{}))); return res.status(400).json({ error:'These files exceed the 100 MB total upload limit.' }); }
-    try {
-      const result=[];
-      for (const file of spreadsheets) {
-        if (Number(file.size)>MAX_FILE_BYTES) throw new Error(`"${file.originalname}" is larger than 25 MB.`);
-        const profile=await profileFile(file.path,file.originalname);
-        const row=await createExcelFile(pool,{name:file.originalname,sizeBytes:file.size,path:file.path,profile,mimeType:file.mimetype});
-        result.push({id:row.id,name:row.name,size_bytes:Number(row.size_bytes)});
-      }
-      for (const file of files.filter(f=>!isSpreadsheetName(f.originalname))) await fs.promises.unlink(file.path).catch(()=>{});
-      res.json(result);
-    } catch (err) {
-      await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{})));
-      res.status(400).json({ error: err.message || 'Unable to process the uploaded file.' });
-    }
-  });
-});
-
-app.get('/api/files/:id/download', async (req,res) => {
-  try {
-    const file = await getExcelFile(pool, req.params.id, 'generated');
-    if (!file) return res.status(404).json({ error:'Generated workbook not found or expired.' });
-    res.download(file.path, file.name);
-  } catch (err) { res.status(500).json({ error:'Unable to download workbook.' }); }
-});
-
 app.post('/api/agent/chat', async (req, res) => {
   const message = String(req.body.message || '').trim().slice(0, 10000);
   const image = req.body.imageDataUrl || null;
-  if (!message && !image) return res.status(400).json({ error: 'Message or image is required.' });
+  const fileIds = Array.isArray(req.body.fileIds) ? req.body.fileIds : [];
+  if (!message && !image && !fileIds.length) return res.status(400).json({ error: 'Message or image is required.' });
   try {
     const rawFileIds = Array.isArray(req.body.fileIds) ? req.body.fileIds : [];
     const result = await runAgent(message, image, rawFileIds);
