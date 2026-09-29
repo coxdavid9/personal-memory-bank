@@ -714,6 +714,22 @@ app.get('/api/approvals', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Unable to load approvals.' }); }
 });
 
+async function getLatestAgentMessages(db, limit = 100) {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
+  const { rows } = await db.query(`SELECT id, role, content, actions, created_at AS created FROM agent_messages ORDER BY created_at DESC LIMIT $1`, [safeLimit]);
+  return rows.reverse();
+}
+
+async function recordApprovalDecision(db, approval, decision) {
+  const verb = decision === 'approve' ? 'Approved' : 'Denied';
+  const content = `${verb}: ${approval.skill}.`;
+  await db.query(
+    'INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)',
+    ['assistant', content, JSON.stringify([])]
+  );
+  return content;
+}
+
 app.post('/api/approvals/:id/decision', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'Persistent storage is not configured yet.' });
   try {
@@ -723,11 +739,13 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
     if (!current) return res.status(404).json({ error: 'Approval not found.' });
     if (decision === 'deny') {
       const result = await decideApproval(pool, id, 'deny');
+      if (result.ok) await recordApprovalDecision(pool, current, 'deny');
       return res.json(result);
     }
     if (decision !== 'approve') return res.status(400).json({ error: 'Decision must be approve or deny.' });
     const result = await decideApproval(pool, id, 'approve');
     if (!result.ok) return res.status(409).json(result);
+    await recordApprovalDecision(pool, current, 'approve');
 
     const actions = [];
     const execution = await executeAgentTool(current.skill, current.args, buildToolDeps({
@@ -795,8 +813,10 @@ app.get('/api/files/:id/download', async (req, res) => {
 
 app.get('/api/agent/messages', async (req, res) => {
   if (!pool) return res.json({ messages: [] });
-  try { const { rows } = await pool.query(`SELECT id, role, content, actions, created_at AS created FROM agent_messages ORDER BY created_at ASC LIMIT 100`); res.json({ messages: rows }); }
-  catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
+  try {
+    const { rows } = await getLatestAgentMessages(pool, 100);
+    res.json({ messages: rows });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
 });
 
 app.post('/api/agent/chat', async (req, res) => {
@@ -874,4 +894,4 @@ if (require.main === module) {
   }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
 }
 
-module.exports = { app, buildToolDeps, getAgentContext };
+module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision };
