@@ -42,7 +42,7 @@ test('memory deletion endpoint and project status cycle are present', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(source, /app\.delete\('\/api\/memories\/\:id'/);
   assert.match(source, /app\.patch\('\/api\/projects\/\:id'/);
-  assert.match(source, /active: 'paused', paused: 'done', done: 'active'/);
+  assert.match(source, /WHEN 'active' THEN 'paused' WHEN 'paused' THEN 'done' WHEN 'done' THEN 'active'/);
 });
 
 test('capability toggle endpoint persists enabled state', () => {
