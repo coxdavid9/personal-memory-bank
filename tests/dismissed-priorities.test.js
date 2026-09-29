@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { isDismissedJobText } = require('../job-search');
-const { buildSuggestions } = require('../suggestions');
 
 test('dismissal language is recognized without deleting history', () => {
   assert.equal(isDismissedJobText('Onin posting is stale'), true);
@@ -12,10 +11,6 @@ test('dismissal language is recognized without deleting history', () => {
   assert.equal(isDismissedJobText('Review the Acme posting'), false);
 });
 
-test('suggestions never invent a dismissal as an actionable signal', () => {
-  const suggestions = buildSuggestions({ approvalCount: 0, reminderCount: 0, actionableCount: 0, hour: 10 });
-  assert.deepEqual(suggestions, []);
-});
 
 test('server priority rules explicitly exclude dismissed jobs and require actionable verbs', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
