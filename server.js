@@ -440,6 +440,40 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   }
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
+
+function buildToolDeps({ actions = [], runId = null, skipPolicy = false } = {}) {
+  const resolvedRunId = runId || `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  return {
+    pool,
+    hasEmailReminders,
+    hasNtfyReminders,
+    scheduleReminderEmail,
+    scheduleReminderNtfy,
+    getAgentContext,
+    recordHolding,
+    deleteHolding,
+    deleteManualHoldings,
+    getPortfolioSummary,
+    getJobApplicationHistory,
+    saveJobApplication,
+    caldav,
+    github,
+    renderOps,
+    delegateToTeam,
+    getExcelFile,
+    profileExcelFile: profileFile,
+    queryExcelFile,
+    buildExcelWorkbook: buildWorkbook,
+    createExcelFile,
+    deleteExcelFile,
+    excelUploadDir: UPLOAD_DIR,
+    callSpecialist: (args) => callSpecialist({ ...args, runId: resolvedRunId, onAction: action => actions.push(action) }),
+    onAction: action => actions.push(action),
+    runId: resolvedRunId,
+    skipPolicy
+  };
+}
+
 async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
@@ -499,34 +533,10 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
     for (const call of toolCalls) {
       let args = {};
       try { args = JSON.parse(call.arguments || '{}'); } catch {}
-      const result = await executeAgentTool(call.name, args, {
-        pool,
-        hasEmailReminders,
-        hasNtfyReminders,
-        scheduleReminderEmail,
-        scheduleReminderNtfy,
-        getAgentContext,
-        recordHolding,
-        deleteHolding,
-        deleteManualHoldings,
-        getPortfolioSummary,
-        getJobApplicationHistory,
-        saveJobApplication,
-        caldav,
-        github,
-        renderOps,
-        delegateToTeam,
-        getExcelFile,
-        profileExcelFile: profileFile,
-        queryExcelFile,
-        buildExcelWorkbook: buildWorkbook,
-        deleteExcelFile,
-        createExcelFile,
-        excelUploadDir: UPLOAD_DIR,
-        callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
-        onAction: action => actions.push(action),
-        runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-      });
+      const result = await executeAgentTool(call.name, args, buildToolDeps({
+        actions,
+        runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+      }))
       responseInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
@@ -719,31 +729,11 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
     if (!result.ok) return res.status(409).json(result);
 
     const actions = [];
-    const execution = await executeAgentTool(current.skill, current.args, {
-      pool,
-      hasEmailReminders,
-      hasNtfyReminders,
-      scheduleReminderEmail,
-      scheduleReminderNtfy,
-      getAgentContext,
-      recordHolding,
-      getPortfolioSummary,
-      caldav,
-      github,
-      renderOps,
-      delegateToTeam,
-      getExcelFile,
-      profileExcelFile: profileFile,
-      queryExcelFile,
-      buildExcelWorkbook: buildWorkbook,
-      createExcelFile,
-      deleteExcelFile,
-      excelUploadDir: UPLOAD_DIR,
-      callSpecialist,
-      onAction: action => actions.push(action),
+    const execution = await executeAgentTool(current.skill, current.args, buildToolDeps({
+      actions,
       runId: current.runId,
       skipPolicy: true
-    });
+    }))
     await auditToolCall(pool, { runId: current.runId, skill: current.skill, tier: 'ask', decision: 'approved_execute', args: current.args, durationMs: 0 });
     res.json({ ok: true, approval: result.approval, execution, actions });
   } catch (err) {
@@ -875,8 +865,12 @@ app.delete('/api/memories/:id', async (req, res) => {
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-initDb().then(async () => {
-  if (pool) setInterval(() => purgeExpiredExcelFiles(pool).catch(err => console.error('Excel purge failed:', err)), 24 * 60 * 60 * 1000);
-  if (caldav) await caldav.discover();
-  app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}; CalDAV:${Boolean(caldav)}`));
-}).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
+if (require.main === module) {
+  initDb().then(async () => {
+    if (pool) setInterval(() => purgeExpiredExcelFiles(pool).catch(err => console.error('Excel purge failed:', err)), 24 * 60 * 60 * 1000);
+    if (caldav) await caldav.discover();
+    app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}; CalDAV:${Boolean(caldav)}`));
+  }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
+}
+
+module.exports = { app, buildToolDeps, getAgentContext };
