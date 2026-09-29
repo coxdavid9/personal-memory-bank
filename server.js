@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
-const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings } = require('./portfolio');
+const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
@@ -258,22 +258,41 @@ async function cancelReminderEmail(emailId) {
   if (!response.ok) console.error('Unable to cancel scheduled reminder:', response.statusText);
 }
 
-async function getAgentContext() {
-  if (!pool) return { memories: [], projects: [], capabilities: [], priorityContext: { memories: [], jobs: [] } };
-  const [memories, projects, capabilities, jobs] = await Promise.all([
-    pool.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
-    pool.query(`SELECT id, name, description, status FROM agent_projects ORDER BY name`),
-    pool.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
-    pool.query(`SELECT id, created_at AS created, updated_at AS updated, title, company, location, url, status, notes
+async function getAgentContext(db = pool) {
+  if (!db) return {
+    memories: [],
+    projects: [],
+    capabilities: [],
+    portfolioState: { manualCount: 0, plaidCount: 0 },
+    priorityContext: { memories: [], jobs: [] }
+  };
+  const [memories, projects, capabilities, jobs, portfolio] = await Promise.all([
+    db.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
+    db.query(`SELECT id, name, description, status FROM agent_projects ORDER BY name`),
+    db.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
+    db.query(`SELECT id, created_at AS created, updated_at AS updated, title, company, location, url, status, notes
                FROM job_applications
                WHERE status NOT IN ('ignore','rejected')
                ORDER BY updated_at DESC LIMIT 100`),
+    db.query(`SELECT
+                COUNT(*) FILTER (WHERE source='manual')::int AS "manualCount",
+                COUNT(*) FILTER (WHERE source='plaid')::int AS "plaidCount"
+              FROM holdings`),
   ]);
-  const actionableMemories = memories.rows.filter(row => !row.done && !isDismissedJobText(row.text));
+  const portfolioState = {
+    manualCount: Number(portfolio.rows[0]?.manualCount || 0),
+    plaidCount: Number(portfolio.rows[0]?.plaidCount || 0)
+  };
+  const currentMemories = memories.rows.filter(row => !isStalePortfolioGuidance(row.text));
+  const actionableMemories = currentMemories.filter(row => !row.done && !isDismissedJobText(row.text));
   return {
-    memories: memories.rows,
+    memories: currentMemories,
     projects: projects.rows,
     capabilities: capabilities.rows,
+    portfolioState,
+    portfolioGuidance: portfolioState.manualCount > 0
+      ? 'Manual holdings are present. If discussing their values or reliability, verify the live portfolio state before making current-state claims.'
+      : null,
     priorityContext: { memories: actionableMemories, jobs: jobs.rows }
   };
 }
@@ -291,6 +310,8 @@ function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = [], excelF
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
 Architecture rules:
+- Freshness rule: memory notes describe what was true when written. Before repeating a note's claim about current conditions (holdings exist, a job is open, an approval is pending), check the live tool or table when one exists. Live state wins on conflict; say which source you trusted. Notes remain authoritative for preferences, history, and standing instructions; only current-state claims defer to live data.
+- Portfolio caution is derived from live context.portfolioState, not from stored caution notes. If context.portfolioState.manualCount > 0, you may mention the manual-data caution after verifying current portfolio data. If it is 0, do not mention fake, stale, or unreliable manual numbers at all.
 - Memory is personal context, not customer data.
 - ClearCFO project knowledge can live in memory, but customer financial data must remain in ClearCFO's own backend/database and should only be accessed through an explicit, controlled integration.
 - Job search is a live capability. For job-search requests, use the built-in web search tool to find current listings, and use get_job_application_history before evaluating results. Apply David's saved preferences: prioritize Jonesboro, then Memphis; target around $75k; accounting/finance; avoid manufacturing-only roles; exclude jobs already applied to or rejected when the history establishes that. Be transparent when a listing's salary or status is unavailable. Do not claim a listing is new unless current search data supports it. When David explicitly asks to track a job decision, use save_job_application only after the decision has been explicitly confirmed by David.
@@ -302,6 +323,10 @@ Architecture rules:
   - Priority hygiene is strict: when David asks what he should work on, use only context.priorityContext as the candidate pool. List only actionable items, each with a concrete next-step verb (fix, verify, send, review, build…). Never include "ignore X", "don't do Y", "X is stale", or equivalent dismissal work. Dismissed, deleted, ignored, and resolved items are omitted silently. If everything is handled, say so in one line.
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
+- Live portfolio state:
+{"manualCount":0,"plaidCount":0}
+- Derived portfolio guidance (when present):
+${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
 - When David asks to put something on his iPhone Calendar, use create_calendar_event. The server writes to the dedicated Agent calendar through CalDAV when configured; otherwise the PWA presents the existing iCalendar handoff. Never write to David's personal calendars.
@@ -331,6 +356,12 @@ Team rules: The team is private to David. It is for building and operating David
 
 Relevant memory:
 ${JSON.stringify(context.memories, null, 2)}
+
+Live portfolio state:
+${JSON.stringify(context.portfolioState, null, 2)}
+
+Derived portfolio guidance:
+${context.portfolioGuidance || 'No manual-balance caution applies.'}
 
 Uploaded Excel files available for this turn:
 ${JSON.stringify(excelFiles, null, 2)}
