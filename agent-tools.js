@@ -145,7 +145,7 @@ const delegateTeamTool = {
     properties: {
       role: { type: 'string', enum: ['chief_of_staff','engineering','business_ops','product','customer_ops'], description: 'Specialist role to handle the task.' },
       task: { type: 'string', description: 'The concrete task for the specialist.' },
-      project: { type: ['string','null'], description: 'Related project, such as ClearCFO, Personal Agent, Portfolio, or Job Search.' },
+      project: { type: ['string','null'], description: 'Related project, such as ClearCFO, Jarvis, Portfolio, or Job Search.' },
       context: { type: ['string','null'], description: 'Relevant context the specialist needs.' }
     },
     required: ['role','task','project','context'],

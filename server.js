@@ -205,7 +205,7 @@ function emailHtml(memory) {
   const safeType = String(memory.type || 'Work').replace(/[&<>\"']/g, '');
   const safePriority = String(memory.priority || 'Normal').replace(/[&<>\"']/g, '');
   const due = new Date(memory.due).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
-  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#20242a"><h2>🧠 Personal Agent</h2><p style="color:#667085">You asked me to bring this back to your attention.</p><div style="border:1px solid #e5e7eb;border-left:4px solid #f79009;border-radius:10px;padding:16px;margin:20px 0"><div style="font-size:12px;color:#667085;margin-bottom:8px">${safeType} · ${safePriority} · ${due}</div><div style="font-size:18px;font-weight:600">${safeText}</div></div><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px">Open Personal Agent</a></div>`;
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#20242a"><h2>🧠 Jarvis</h2><p style="color:#667085">You asked me to bring this back to your attention.</p><div style="border:1px solid #e5e7eb;border-left:4px solid #f79009;border-radius:10px;padding:16px;margin:20px 0"><div style="font-size:12px;color:#667085;margin-bottom:8px">${safeType} · ${safePriority} · ${due}</div><div style="font-size:18px;font-weight:600">${safeText}</div></div><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px">Open Jarvis</a></div>`;
 }
 
 async function sendAgentEmail(subject, text) {
@@ -305,7 +305,10 @@ function loadAgentOperatingFiles() {
 
 function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = [], excelFiles = []) {
   const operatingFiles = loadAgentOperatingFiles();
-  return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
+  return `You are Jarvis, David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
+
+Identity rules:
+- Your name is Jarvis. When referring to yourself or this app, say Jarvis — never 'Personal Agent'.
 
 Architecture rules:
 - Freshness rule: memory notes describe what was true when written. Before repeating a note's claim about current conditions (holdings exist, a job is open, an approval is pending), check the live tool or table when one exists. Live state wins on conflict; say which source you trusted. Notes remain authoritative for preferences, history, and standing instructions; only current-state claims defer to live data.
@@ -909,4 +912,4 @@ if (require.main === module) {
   }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
 }
 
-module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision };
+module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, agentSystemPrompt, emailHtml };

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { buildAgentTools } = require('../agent-tools');
+const { agentSystemPrompt, emailHtml } = require('../server');
+const { PORTFOLIO_NOTIFICATION_SUBJECT } = require('../portfolio-agent');
 
 test('disabling a capability removes its tools from the built toolset', () => {
   const tools = buildAgentTools({
@@ -68,4 +70,35 @@ test('Jarvis v3 UI wiring is present and purple legacy accents are gone', () => 
   assert.match(manifest, /"short_name": "Jarvis"/);
   assert.match(server, /<title>Jarvis — Sign in<\/title>/);
   assert.match(server, /<h1>JARVIS<\/h1>/);
+});
+
+
+test('chat paste handler routes clipboard images through the attachment flow', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(html, /async function attachImageFile\(file\)/);
+  assert.match(html, /function handleImagePaste\(event\)/);
+  assert.ok(html.includes('clipboardData'));
+  assert.ok(html.includes("startsWith('image/')"));
+  assert.match(html, /event\.preventDefault\(\)/);
+  assert.match(html, /void attachImageFile\(file\)/);
+  assert.match(html, /messageInput\.addEventListener\('paste',handleImagePaste\)/);
+  assert.match(html, /document\.addEventListener\('paste',handleImagePaste\)/);
+});
+
+test('Jarvis identity is consistent across prompt and notification surfaces', () => {
+  const prompt = agentSystemPrompt({ memories: [], projects: [], capabilities: [], portfolioState: { manualCount: 0, plaidCount: 0 }, priorityContext: { memories: [], jobs: [] } });
+  const reminder = emailHtml({ text: 'Test reminder', type: 'Work', priority: 'Normal', due: new Date().toISOString() });
+  assert.match(prompt, /You are Jarvis, David's personal AI agent\./);
+  assert.match(prompt, /Your name is Jarvis\./);
+  assert.match(prompt, /never 'Personal Agent'/);
+  assert.equal((prompt.match(/Personal Agent/g) || []).length, 1);
+  assert.match(reminder, /🧠 Jarvis/);
+  assert.match(reminder, /Open Jarvis/);
+  assert.doesNotMatch(reminder, /Personal Agent/);
+  assert.match(PORTFOLIO_NOTIFICATION_SUBJECT, /^Jarvis — portfolio alert$/);
+  assert.doesNotMatch(PORTFOLIO_NOTIFICATION_SUBJECT, /Personal Agent/);
+
+  const toolsSource = fs.readFileSync(path.join(__dirname, '..', 'agent-tools.js'), 'utf8');
+  assert.match(toolsSource, /such as ClearCFO, Jarvis, Portfolio, or Job Search/);
+  assert.doesNotMatch(toolsSource, /such as ClearCFO, Personal Agent, Portfolio, or Job Search/);
 });
