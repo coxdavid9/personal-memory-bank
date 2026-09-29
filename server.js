@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
+const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings } = require('./portfolio');
@@ -13,6 +14,8 @@ const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = r
 const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
+const { buildSuggestions } = require('./suggestions');
+const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
 
 const app = express();
 const port = Number(process.env.PORT) || 10000;
@@ -33,6 +36,7 @@ const github = buildGitHubClientFromEnv();
 const renderOps = buildRenderClientFromEnv();
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 const renderServiceId = process.env.RENDER_SERVICE_ID || 'srv-da8pp1p5efls73e9beo0';
+ensureUploadDir();
 
 function signSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -153,6 +157,8 @@ async function initDb() {
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
+  await initExcelDb(pool);
+  await purgeMissingExcelFiles(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS github_webhook_events (
       delivery_id TEXT PRIMARY KEY,
@@ -275,7 +281,7 @@ function loadAgentOperatingFiles() {
   }).filter(item => item.content);
 }
 
-function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = []) {
+function agentSystemPrompt(context, teamRoles = [], recentTeamTasks = [], excelFiles = []) {
   const operatingFiles = loadAgentOperatingFiles();
   return `You are David's personal AI agent. You are not a generic chatbot. Your job is to understand David's priorities, remember useful context, help him make decisions, and move projects forward. Be direct and practical. Do not invent facts. If information is missing, say so and propose the next step.
 
@@ -317,7 +323,13 @@ ${JSON.stringify(recentTeamTasks, null, 2)}
 Team rules: The team is private to David. It is for building and operating David's projects, not for ClearCFO customers. Delegate concrete work to specialists instead of pretending you personally completed external actions.
 
 Relevant memory:
-${JSON.stringify(context.memories, null, 2)}`;
+${JSON.stringify(context.memories, null, 2)}
+
+Uploaded Excel files available for this turn:
+${JSON.stringify(excelFiles, null, 2)}
+
+Excel rules: when files are attached, use excel_summary first if the user has not asked a specific question; use excel_query for all arithmetic; never treat missing or empty cells as zero; do not dump raw tables into chat; when David asks for a workbook, use excel_build and provide the generated download action.
+`;
 }
 
 async function callSpecialist({ roleKey, system, user, runId, onAction }) {
@@ -396,10 +408,21 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   }
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
-async function runAgent(message, imageDataUrl = null) {
+async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext();
+  const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(id => Number.isInteger(id)))];
+  if (ids.length > MAX_FILES_PER_MESSAGE) throw new Error('You can attach up to 5 Excel/CSV files per message.');
+  const excelFiles = [];
+  let totalBytes = 0;
+  for (const id of ids) {
+    const file = await getExcelFile(pool, id, 'source');
+    if (!file) throw new Error('One of the attached Excel files was not found or has expired.');
+    totalBytes += Number(file.size_bytes || 0);
+    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('The attached files exceed the 100 MB total limit for one message.');
+    excelFiles.push({ id:file.id, name:file.name, size_bytes:Number(file.size_bytes), sheet_names:file.sheet_names, total_rows:file.total_rows });
+  }
   const teamRoles = getTeamRoles();
   const recentTeamTasks = await getRecentTeamTasks(pool, 12);
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
@@ -407,14 +430,14 @@ async function runAgent(message, imageDataUrl = null) {
   const userContent = image
     ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
     : String(message || '').trim().slice(0, 10000);
-  if (!String(message || '').trim() && !image) throw new Error('Message or image is required.');
+  if (!String(message || '').trim() && !image && !excelFiles.length) throw new Error('Message, image, or Excel file is required.');
   const input = [
-    { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks) },
+    { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks, excelFiles) },
     ...recent.map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: userContent },
   ];
 
-  const job = inferJob(message);
+  const job = inferJob(message, excelFiles.length > 0);
   const tools = buildAgentTools({ job });
   let responseInput = input;
 
@@ -464,6 +487,13 @@ async function runAgent(message, imageDataUrl = null) {
         scheduleReminderEmail,
         scheduleReminderNtfy,
         getAgentContext,
+        getExcelFile,
+        profileExcelFile: profileFile,
+        queryExcelFile,
+        buildExcelWorkbook: buildWorkbook,
+        createExcelFile,
+        deleteExcelFile,
+        excelUploadDir: UPLOAD_DIR,
         recordHolding,
         deleteHolding,
         deleteManualHoldings,
@@ -624,6 +654,25 @@ app.get('/api/team', async (req, res) => {
   }
 });
 
+app.get('/api/suggestions', async (req,res) => {
+  if (!pool) return res.json({ suggestions: [] });
+  try {
+    const [approvals, reminders] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS count FROM tool_approvals WHERE status='pending' AND expires_at>NOW()"),
+      pool.query("SELECT COUNT(*)::int AS count FROM memories WHERE done=false AND due_at IS NOT NULL AND due_at >= CURRENT_DATE AND due_at < CURRENT_DATE + INTERVAL '1 day'")
+    ]);
+    const approvalCount=approvals.rows[0]?.count||0;
+    const reminderCount=reminders.rows[0]?.count||0;
+    const hour=new Date().toLocaleString('en-US',{hour:'numeric',hour12:false,timeZone:'America/Chicago'});
+    let recentUserCount=0;
+    if(Number(approvalCount)===0 && Number(reminderCount)===0) {
+      const recent=await pool.query("SELECT COUNT(*)::int AS count FROM agent_messages WHERE role='user' AND created_at>=CURRENT_DATE");
+      recentUserCount=recent.rows[0]?.count||0;
+    }
+    res.json({suggestions:buildSuggestions({approvalCount,reminderCount,recentUserCount,hour})});
+  } catch(err) { console.error('Suggestions failed:',err); res.status(500).json({error:'Unable to load suggestions.'}); }
+});
+
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
@@ -672,6 +721,13 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
       github,
       renderOps,
       delegateToTeam,
+      getExcelFile,
+      profileExcelFile: profileFile,
+      queryExcelFile,
+      buildExcelWorkbook: buildWorkbook,
+      createExcelFile,
+      deleteExcelFile,
+      excelUploadDir: UPLOAD_DIR,
       callSpecialist,
       onAction: action => actions.push(action),
       runId: current.runId,
@@ -685,10 +741,93 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
   }
 });
 
+
+const excelUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => { ensureUploadDir(); cb(null, UPLOAD_DIR); },
+    filename: (_req, file, cb) => cb(null, `upload-${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${safeFileName(file.originalname)}`)
+  }),
+  limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_MESSAGE, parts: MAX_FILES_PER_MESSAGE + 2 },
+  fileFilter: (_req, file, cb) => isSpreadsheetName(file.originalname) ? cb(null, true) : cb(new Error(`"${file.originalname}" is not an Excel/CSV file. Excel/CSV uploads only.`))
+});
+
+app.post('/api/files', (req, res) => {
+  excelUpload.array('files', MAX_FILES_PER_MESSAGE)(req, res, async err => {
+    const uploaded = req.files || [];
+    const cleanup = async () => { for (const file of uploaded) await fs.promises.unlink(file.path).catch(() => {}); };
+    if (err) {
+      await cleanup();
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: `"${err.filename || 'The file'}" is larger than 25 MB.` });
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_COUNT') return res.status(413).json({ error: 'You can upload up to 5 Excel/CSV files at a time.' });
+      return res.status(400).json({ error: err.message || 'Unable to upload the files.' });
+    }
+    if (!uploaded.length) return res.status(400).json({ error: 'Choose one or more .xlsx, .xls, or .csv files.' });
+    const total = uploaded.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    if (total > MAX_TOTAL_BYTES) { await cleanup(); return res.status(413).json({ error: 'The selected files exceed the 100 MB total upload limit.' }); }
+    try {
+      if (!pool) { await cleanup(); return res.status(503).json({ error: 'Persistent storage is not configured yet.' }); }
+      const results=[];
+      for (const file of uploaded) {
+        if (!isSpreadsheetName(file.originalname)) throw new Error(`"${file.originalname}" is not an Excel/CSV file.`);
+        const profile=await profileFile(file.path,file.originalname);
+        const row=await createExcelFile(pool,{name:safeFileName(file.originalname),sizeBytes:file.size,path:file.path,profile,mimeType:file.mimetype||'application/octet-stream',kind:'source'});
+        results.push({id:Number(row.id),name:row.name,size_bytes:Number(row.size_bytes)});
+      }
+      res.status(201).json(results);
+    } catch (uploadErr) {
+      await cleanup();
+      console.error('Excel upload failed:',uploadErr);
+      res.status(400).json({ error: uploadErr.message || 'Unable to process the uploaded Excel file.' });
+    }
+  });
+});
+
+app.get('/api/files/:id/download', async (req, res) => {
+  try {
+    const file=await getExcelFile(pool,req.params.id,'generated');
+    if(!file) return res.status(404).json({error:'Generated workbook not found or expired.'});
+    if(!fs.existsSync(file.path)) return res.status(404).json({error:'Generated workbook is no longer available.'});
+    res.download(file.path,file.name,{headers:{'Cache-Control':'no-store'}});
+  } catch(err) { console.error('Excel download failed:',err); res.status(500).json({error:'Unable to download the workbook.'}); }
+});
+
 app.get('/api/agent/messages', async (req, res) => {
   if (!pool) return res.json({ messages: [] });
   try { const { rows } = await pool.query(`SELECT id, role, content, actions, created_at AS created FROM agent_messages ORDER BY created_at ASC LIMIT 100`); res.json({ messages: rows }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
+});
+
+app.post('/api/files', (req,res) => {
+  upload.array('files', MAX_FILES_PER_MESSAGE)(req,res, async err => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A file exceeds the 25 MB per-file limit.' : err.message || 'Unable to upload files.' });
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ error:'No files were uploaded.' });
+    const spreadsheets = files.filter(f => isSpreadsheetName(f.originalname));
+    const total = files.reduce((n,f)=>n+Number(f.size||0),0);
+    if (total > MAX_TOTAL_BYTES) { await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{}))); return res.status(400).json({ error:'These files exceed the 100 MB total upload limit.' }); }
+    try {
+      const result=[];
+      for (const file of spreadsheets) {
+        if (Number(file.size)>MAX_FILE_BYTES) throw new Error(`"${file.originalname}" is larger than 25 MB.`);
+        const profile=await profileFile(file.path,file.originalname);
+        const row=await createExcelFile(pool,{name:file.originalname,sizeBytes:file.size,path:file.path,profile,mimeType:file.mimetype});
+        result.push({id:row.id,name:row.name,size_bytes:Number(row.size_bytes)});
+      }
+      for (const file of files.filter(f=>!isSpreadsheetName(f.originalname))) await fs.promises.unlink(file.path).catch(()=>{});
+      res.json(result);
+    } catch (err) {
+      await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{})));
+      res.status(400).json({ error: err.message || 'Unable to process the uploaded file.' });
+    }
+  });
+});
+
+app.get('/api/files/:id/download', async (req,res) => {
+  try {
+    const file = await getExcelFile(pool, req.params.id, 'generated');
+    if (!file) return res.status(404).json({ error:'Generated workbook not found or expired.' });
+    res.download(file.path, file.name);
+  } catch (err) { res.status(500).json({ error:'Unable to download workbook.' }); }
 });
 
 app.post('/api/agent/chat', async (req, res) => {
@@ -696,9 +835,10 @@ app.post('/api/agent/chat', async (req, res) => {
   const image = req.body.imageDataUrl || null;
   if (!message && !image) return res.status(400).json({ error: 'Message or image is required.' });
   try {
-    const result = await runAgent(message, image);
+    const rawFileIds = Array.isArray(req.body.fileIds) ? req.body.fileIds : [];
+    const result = await runAgent(message, image, rawFileIds);
     if (pool) {
-      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message || '[Image attached]']);
+      await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message || (rawFileIds.length ? '[Excel files attached]' : '[Image attached]')]);
       await pool.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)', ['assistant', result.text, JSON.stringify(result.actions || [])]);
     }
     res.json({ reply: result.text, actions: result.actions || [] });
@@ -757,6 +897,7 @@ app.delete('/api/memories/:id', async (req, res) => {
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 initDb().then(async () => {
+  if (pool) setInterval(() => purgeExpiredExcelFiles(pool).catch(err => console.error('Excel purge failed:', err)), 24 * 60 * 60 * 1000);
   if (caldav) await caldav.discover();
   app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}; CalDAV:${Boolean(caldav)}`));
 }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
