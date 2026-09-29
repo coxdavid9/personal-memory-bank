@@ -320,7 +320,7 @@ async function executeAgentTool(name, args, deps) {
     const tempPath = path.join(deps.excelUploadDir, 'generated-' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '.xlsx');
     await deps.buildExcelWorkbook(tempPath, { sheets: args.sheets || [] });
     const stat = await fs.promises.stat(tempPath);
-    const row = await deps.createExcelFile(deps.pool, { name, sizeBytes: stat.size, path: tempPath, profile: { sheets: (args.sheets || []).map(s => ({ name:s.name })), total_rows: (args.sheets || []).reduce((n,s)=>n+(s.rows||[]).length,n) }, mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', kind:'generated' });
+    const row = await deps.createExcelFile(deps.pool, { name, sizeBytes: stat.size, path: tempPath, profile: { sheets: (args.sheets || []).map(s => ({ name:s.name })), total_rows: (args.sheets || []).reduce((n,s)=>n+(s.rows||[]).length,0) }, mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', kind:'generated' });
     const action = { type:'file_download', fileId:row.id, name:row.name, url:'/api/files/'+row.id+'/download' };
     if (deps.onAction) deps.onAction(action);
     return { ok:true, file:row, action };
