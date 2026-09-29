@@ -78,7 +78,7 @@ test('chat paste handler routes clipboard images through the attachment flow', (
   assert.match(html, /async function attachImageFile\(file\)/);
   assert.match(html, /function handleImagePaste\(event\)/);
   assert.match(html, /event\.clipboardData\?\.items/);
-  assert.match(html, /items\.find\(item=>item\.type\.startsWith\('image\\/ '\)/);
+  assert.match(html, /items\.find\(item=>item\.type\.startsWith\('image\\/'\)/);
   assert.match(html, /event\.preventDefault\(\)/);
   assert.match(html, /void attachImageFile\(file\)/);
   assert.match(html, /messageInput\.addEventListener\('paste',handleImagePaste\)/);
