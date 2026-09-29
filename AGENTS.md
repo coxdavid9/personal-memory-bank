@@ -12,3 +12,7 @@
 8. Do not claim external work happened without tool confirmation.
 9. Ask for approval before new external writes unless explicitly whitelisted.
 10. Personal memory and ClearCFO customer financial data are separate stores.
+
+## State-change freshness
+
+11. Any new state-changing action must declare which memory-note patterns it invalidates. When the action succeeds, retire those notes and write one superseding current-state note when needed. Dismissal and deletion are examples: live state must outrank guidance notes that the action invalidated.
