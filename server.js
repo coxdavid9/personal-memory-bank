@@ -15,8 +15,6 @@ const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = requir
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 const { buildSuggestions } = require('./suggestions');
-const multer = require('multer');
-const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, deleteExcelFile, queryExcelFile, buildWorkbook } = require('./excel');
 const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
 
 const app = express();
@@ -79,11 +77,6 @@ const pool = hasDatabase
 
 app.use(express.json({ limit: '5mb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
-ensureUploadDir();
-const upload = multer({
-  storage: multer.diskStorage({ destination: (_req,_file,cb) => cb(null, UPLOAD_DIR), filename: (_req,file,cb) => cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g,'_')}`) }),
-  limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_MESSAGE, fields: 10 }
-});
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -164,7 +157,6 @@ async function initDb() {
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
-  await initExcelDb(pool);
   await initExcelDb(pool);
   await purgeMissingExcelFiles(pool);
   await pool.query(`
@@ -435,12 +427,6 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const recentTeamTasks = await getRecentTeamTasks(pool, 12);
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
   const image = validateImageDataUrl(imageDataUrl);
-  const excelFiles = [];
-  for (const rawId of Array.isArray(fileIds) ? fileIds.slice(0, MAX_FILES_PER_MESSAGE) : []) {
-    const file = await getExcelFile(pool, rawId, 'source');
-    if (!file) throw new Error(`Uploaded file ${rawId} was not found or has expired.`);
-    excelFiles.push(file);
-  }
   const userContent = image
     ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
     : String(message || '').trim().slice(0, 10000);
@@ -514,13 +500,6 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
         getPortfolioSummary,
         getJobApplicationHistory,
         saveJobApplication,
-        getExcelFile,
-        profileExcelFile: profileFile,
-        queryExcelFile,
-        buildExcelWorkbook: buildWorkbook,
-        createExcelFile,
-        deleteExcelFile,
-        excelUploadDir: UPLOAD_DIR,
         caldav,
         github,
         renderOps,
