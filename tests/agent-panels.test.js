@@ -22,7 +22,7 @@ test('disabling a capability removes its tools from the built toolset', () => {
 test('projects panel loads all statuses separately from active-only agent context', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(html, /api\\('\/api\/projects'\\)/);
+  assert.match(html, /api\('\/api\/projects'\)/);
   assert.match(html, /projectData\.projects/);
   assert.match(html, /badge/);
   assert.match(html, /badge\.paused/);
