@@ -264,11 +264,33 @@ function inferJob(message = '', hasFiles = false) {
   return 'general';
 }
 
-function buildAgentTools({ job = 'general' } = {}) {
+const CAPABILITY_TOOL_MAP = Object.freeze({
+  memory: new Set(['save_memory','get_personal_context']),
+  'job-search': new Set(['get_job_application_history','save_job_application']),
+  calendar: new Set(['create_calendar_event']),
+  portfolio: new Set(['get_portfolio_summary','record_holding','delete_holding']),
+  'agent-team': new Set(['delegate_to_team']),
+  excel: new Set(['excel_summary','excel_query','excel_build','excel_delete']),
+  clearcfo: new Set(),
+});
+
+function buildAgentTools({ job = 'general', enabledCapabilities = null } = {}) {
   const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
-  const selected = all.filter(tool => allowed.has(tool.name));
-  if (job === 'job_search') selected.push({ type: 'web_search_preview' });
+  const enabled = enabledCapabilities == null
+    ? null
+    : new Set((Array.isArray(enabledCapabilities) ? enabledCapabilities : [])
+      .filter(cap => cap && cap.enabled !== false)
+      .map(cap => typeof cap === 'string' ? cap : cap.key));
+  const selected = all.filter(tool => {
+    if (!allowed.has(tool.name)) return false;
+    if (!enabled) return true;
+    for (const [capability, toolNames] of Object.entries(CAPABILITY_TOOL_MAP)) {
+      if (toolNames.has(tool.name)) return enabled.has(capability);
+    }
+    return true;
+  });
+  if (job === 'job_search' && (!enabled || enabled.has('job-search'))) selected.push({ type: 'web_search_preview' });
   return selected;
 }
 
