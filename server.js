@@ -761,7 +761,7 @@ app.get('/api/agent/context', async (req, res) => {
 });
 
 app.get('/api/approvals', async (req, res) => {
-  if (!pool) return res.json({ approvals: [] });
+  if (!pool) return res.json({ approvals: [], decided: [] });
   try {
     const { rows } = await pool.query(`SELECT id, created_at AS "createdAt", expires_at AS "expiresAt", run_id AS "runId", skill, args, status, decided_at AS "decidedAt", decision FROM tool_approvals WHERE status='pending' ORDER BY created_at ASC`);
     for (const approval of rows) if (new Date(approval.expiresAt).getTime() <= Date.now()) {
@@ -769,7 +769,8 @@ app.get('/api/approvals', async (req, res) => {
       approval.status = 'expired';
       approval.decision = 'timeout';
     }
-    res.json({ approvals: rows.filter(row => row.status === 'pending') });
+    const { rows: decided } = await pool.query(`SELECT id, status, decision, decided_at AS "decidedAt" FROM tool_approvals WHERE status IN ('approved','denied','expired') ORDER BY decided_at DESC NULLS LAST LIMIT 100`);
+    res.json({ approvals: rows.filter(row => row.status === 'pending'), decided });
   } catch (err) { res.status(500).json({ error: 'Unable to load approvals.' }); }
 });
 
