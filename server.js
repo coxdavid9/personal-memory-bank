@@ -14,6 +14,8 @@ const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = r
 const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
+const multer = require('multer');
+const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, deleteExcelFile, queryExcelFile, buildWorkbook } = require('./excel');
 const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
 
 const app = express();
@@ -76,6 +78,11 @@ const pool = hasDatabase
 
 app.use(express.json({ limit: '5mb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
+ensureUploadDir();
+const upload = multer({
+  storage: multer.diskStorage({ destination: (_req,_file,cb) => cb(null, UPLOAD_DIR), filename: (_req,file,cb) => cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g,'_')}`) }),
+  limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_MESSAGE, fields: 10 }
+});
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -156,6 +163,7 @@ async function initDb() {
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
+  await initExcelDb(pool);
   await initExcelDb(pool);
   await purgeMissingExcelFiles(pool);
   await pool.query(`
@@ -426,6 +434,12 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const recentTeamTasks = await getRecentTeamTasks(pool, 12);
   const recent = pool ? (await pool.query(`SELECT role, content FROM agent_messages ORDER BY created_at DESC LIMIT 12`)).rows.reverse() : [];
   const image = validateImageDataUrl(imageDataUrl);
+  const excelFiles = [];
+  for (const rawId of Array.isArray(fileIds) ? fileIds.slice(0, MAX_FILES_PER_MESSAGE) : []) {
+    const file = await getExcelFile(pool, rawId, 'source');
+    if (!file) throw new Error(`Uploaded file ${rawId} was not found or has expired.`);
+    excelFiles.push(file);
+  }
   const userContent = image
     ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
     : String(message || '').trim().slice(0, 10000);
@@ -486,6 +500,13 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
         scheduleReminderEmail,
         scheduleReminderNtfy,
         getAgentContext,
+        getExcelFile,
+        profileExcelFile: profileFile,
+        queryExcelFile,
+        buildExcelWorkbook: buildWorkbook,
+        createExcelFile,
+        deleteExcelFile,
+        excelUploadDir: UPLOAD_DIR,
         recordHolding,
         deleteHolding,
         deleteManualHoldings,
@@ -782,6 +803,39 @@ app.get('/api/agent/messages', async (req, res) => {
   if (!pool) return res.json({ messages: [] });
   try { const { rows } = await pool.query(`SELECT id, role, content, actions, created_at AS created FROM agent_messages ORDER BY created_at ASC LIMIT 100`); res.json({ messages: rows }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent conversation.' }); }
+});
+
+app.post('/api/files', (req,res) => {
+  upload.array('files', MAX_FILES_PER_MESSAGE)(req,res, async err => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A file exceeds the 25 MB per-file limit.' : err.message || 'Unable to upload files.' });
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ error:'No files were uploaded.' });
+    const spreadsheets = files.filter(f => isSpreadsheetName(f.originalname));
+    const total = files.reduce((n,f)=>n+Number(f.size||0),0);
+    if (total > MAX_TOTAL_BYTES) { await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{}))); return res.status(400).json({ error:'These files exceed the 100 MB total upload limit.' }); }
+    try {
+      const result=[];
+      for (const file of spreadsheets) {
+        if (Number(file.size)>MAX_FILE_BYTES) throw new Error(`"${file.originalname}" is larger than 25 MB.`);
+        const profile=await profileFile(file.path,file.originalname);
+        const row=await createExcelFile(pool,{name:file.originalname,sizeBytes:file.size,path:file.path,profile,mimeType:file.mimetype});
+        result.push({id:row.id,name:row.name,size_bytes:Number(row.size_bytes)});
+      }
+      for (const file of files.filter(f=>!isSpreadsheetName(f.originalname))) await fs.promises.unlink(file.path).catch(()=>{});
+      res.json(result);
+    } catch (err) {
+      await Promise.all(files.map(f=>fs.promises.unlink(f.path).catch(()=>{})));
+      res.status(400).json({ error: err.message || 'Unable to process the uploaded file.' });
+    }
+  });
+});
+
+app.get('/api/files/:id/download', async (req,res) => {
+  try {
+    const file = await getExcelFile(pool, req.params.id, 'generated');
+    if (!file) return res.status(404).json({ error:'Generated workbook not found or expired.' });
+    res.download(file.path, file.name);
+  } catch (err) { res.status(500).json({ error:'Unable to download workbook.' }); }
 });
 
 app.post('/api/agent/chat', async (req, res) => {
