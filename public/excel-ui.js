@@ -9,7 +9,7 @@
     var input=document.getElementById('imageFile');
     if(!input)return;
     input.accept='image/*,.xlsx,.xls,.csv';input.multiple=true;input.onchange=choose;
-    var button=input.nextElementSibling;if(button)button.textContent='📎 Attach';
+    var button=input.nextElementSibling;if(button){button.textContent='📎';button.setAttribute('aria-label','Attach');button.setAttribute('title','Attach');}
     var composer=document.querySelector('.composer');if(composer&&!document.getElementById('excelFileChips')){var box=document.createElement('div');box.id='excelFileChips';box.className='file-chips';composer.insertBefore(box,input);}
     window.send=sendWithFiles;
     if(window.actionHtml){var base=window.actionHtml;window.actionHtml=function(action){if(action&&action.type==='file_download'){return '<div class="action-card"><strong>Workbook ready</strong><span class="muted">'+esc(action.name||'Generated workbook')+'</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="'+esc(action.url)+'" target="_blank" rel="noopener">Download workbook</a></div>';}return base(action);};}
