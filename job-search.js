@@ -17,6 +17,10 @@ async function initJobSearchDb(pool) {
   await pool.query('CREATE INDEX IF NOT EXISTS job_applications_status_idx ON job_applications(status)');
 }
 
+function isDismissedJobText(text) {
+  return /\b(stale|closed|dismissed|ignore|ignored|resolved|no longer available)\b/i.test(String(text || ''));
+}
+
 async function getJobApplicationHistory(pool) {
   if (!pool) return { applications: [], legacyMemories: [] };
   const applications = await pool.query(`
@@ -83,4 +87,4 @@ async function saveJobApplication(pool, args) {
   return { ok: true, application: result.rows[0] };
 }
 
-module.exports = { initJobSearchDb, getJobApplicationHistory, saveJobApplication };
+module.exports = { initJobSearchDb, getJobApplicationHistory, saveJobApplication, isDismissedJobText };
