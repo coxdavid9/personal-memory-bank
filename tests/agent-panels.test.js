@@ -36,3 +36,9 @@ test('capability toggle endpoint persists enabled state', () => {
   assert.match(source, /app\.patch\('\/api\/capabilities\/\:id'/);
   assert.match(source, /UPDATE agent_capabilities SET enabled=\$1,updated_at=NOW\(\)/);
 });
+
+test('server imports capability definitions before initDb uses them', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(source, /require\(['"]\.\/agent-capabilities['"]\)/);
+  assert.match(source, /CAPABILITY_DEFINITIONS/);
+});

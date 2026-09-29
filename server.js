@@ -5,6 +5,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
+const { CAPABILITY_DEFINITIONS } = require('./agent-capabilities');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
