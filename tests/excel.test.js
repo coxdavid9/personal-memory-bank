@@ -8,6 +8,28 @@ const { MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, queryExcelFile, 
 const { classifySkill, TIERS } = require('../policy');
 const { inferJob, buildAgentTools } = require('../agent-tools');
 
+
+function assertTypedSchema(node, pathLabel = 'schema') {
+  assert.equal(node && typeof node === 'object' && !Array.isArray(node), true, `${pathLabel} must be an object`);
+  assert.ok(Object.prototype.hasOwnProperty.call(node, 'type'), `${pathLabel} is missing type`);
+
+  if (node.properties) {
+    for (const [key, child] of Object.entries(node.properties)) {
+      assertTypedSchema(child, `${pathLabel}.properties.${key}`);
+    }
+  }
+  if (node.items) {
+    assertTypedSchema(node.items, `${pathLabel}.items`);
+  }
+}
+
+test('all strict tool parameter schema nodes declare a type', () => {
+  const tools = buildAgentTools({ job: 'excel_analysis' }).filter(tool => tool.parameters);
+  for (const tool of tools) {
+    assertTypedSchema(tool.parameters, `${tool.name}.parameters`);
+  }
+});
+
 test('Excel upload limits are 25 MB per file, 5 files, 100 MB total', () => {
   assert.equal(MAX_FILE_BYTES, 25 * 1024 * 1024);
   assert.equal(MAX_FILES_PER_MESSAGE, 5);
