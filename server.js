@@ -257,15 +257,82 @@ async function cancelReminderEmail(emailId) {
   if (!response.ok) console.error('Unable to cancel scheduled reminder:', response.statusText);
 }
 
-async function getAgentContext(db = pool) {
-  if (!db) return {
-    memories: [],
-    projects: [],
-    capabilities: [],
-    portfolioState: { manualCount: 0, plaidCount: 0 },
-    priorityContext: { memories: [], jobs: [] }
-  };
-  const [memories, projects, capabilities, jobs, portfolio] = await Promise.all([
+function isWorkPriorityQuestion(message = '') {
+  const text = String(message).trim().toLowerCase();
+  if (!text) return false;
+  return [
+    /what should i (?:work on|do|tackle|focus on|handle)/,
+    /what do i need to (?:do|work on|tackle|focus on)/,
+    /what needs (?:doing|to be done)/,
+    /what(?:'s| is) next(?: up)?/,
+    /what are my (?:top )?priorit(?:y|ies)/,
+    /what(?:'s| is) (?:the )?(?:next )?(?:thing|task) (?:i should|to)/
+  ].some(pattern => pattern.test(text));
+}
+
+function buildGitHubPriorityItems(radar = { repos: [] }) {
+  const items = [];
+  for (const repo of radar.repos || []) {
+    for (const pr of repo.openPullRequests || []) {
+      if (pr.ciStatus === 'green' && pr.mergeable !== false) {
+        items.push({
+          kind: 'pull_request',
+          repository: repo.repository,
+          number: pr.number,
+          title: pr.title,
+          text: `Review/merge PR #${pr.number} — CI green`
+        });
+      } else if (pr.ciStatus === 'failing') {
+        items.push({
+          kind: 'pull_request',
+          repository: repo.repository,
+          number: pr.number,
+          title: pr.title,
+          text: `PR #${pr.number} failing CI`
+        });
+      }
+    }
+    for (const check of repo.failingMainChecks || []) {
+      items.push({
+        kind: 'main_check',
+        repository: repo.repository,
+        check: check.name,
+        text: `main is failing on ${check.name}`
+      });
+    }
+    for (const issue of repo.openIssues || []) {
+      items.push({
+        kind: 'issue',
+        repository: repo.repository,
+        number: issue.number,
+        title: issue.title,
+        text: `Review issue #${issue.number} — ${issue.title}`
+      });
+    }
+  }
+  return items;
+}
+
+async function getAgentContext(db = pool, options = {}) {
+  const includeGithub = Boolean(options.includeGithub);
+  const githubClient = options.githubClient === undefined ? github : options.githubClient;
+  const emptyGithub = { repos: [], items: [] };
+  const githubPromise = includeGithub && githubClient?.getPriorityRadar
+    ? githubClient.getPriorityRadar().then(radar => ({ ...radar, items: buildGitHubPriorityItems(radar) })).catch(() => emptyGithub)
+    : Promise.resolve(emptyGithub);
+
+  if (!db) {
+    const githubRadar = await githubPromise;
+    return {
+      memories: [],
+      projects: [],
+      capabilities: [],
+      portfolioState: { manualCount: 0, plaidCount: 0 },
+      priorityContext: { memories: [], jobs: [], github: githubRadar }
+    };
+  }
+
+  const [memories, projects, capabilities, jobs, portfolio, githubRadar] = await Promise.all([
     db.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
     db.query(`SELECT id, name, description, status FROM agent_projects WHERE status='active' ORDER BY name`),
     db.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
@@ -277,6 +344,7 @@ async function getAgentContext(db = pool) {
                 COUNT(*) FILTER (WHERE source='manual')::int AS "manualCount",
                 COUNT(*) FILTER (WHERE source='plaid')::int AS "plaidCount"
               FROM holdings`),
+    githubPromise
   ]);
   const portfolioState = buildPortfolioContext({
     manualCount: portfolio.rows[0]?.manualCount,
@@ -291,7 +359,7 @@ async function getAgentContext(db = pool) {
     capabilities: capabilities.rows,
     portfolioState,
     portfolioGuidance: portfolioState.guidance,
-    priorityContext: { memories: actionableMemories, jobs: jobs.rows }
+    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar }
   };
 }
 
@@ -322,10 +390,14 @@ Architecture rules:
   - For corrections, re-read the source user message(s) supporting each surviving record. Quote the relevant wording in the confirmation. If a surviving record is not supported by a source quote, drop it and ask David to restate/confirm it rather than defending the record from memory.
   - Treat job records as structured state: applied, excluded/rejected, and considering/saved. Applied and excluded/rejected roles must be suppressed from future job lead lists.
   - Priority hygiene is strict: when David asks what he should work on, use only context.priorityContext as the candidate pool. List only actionable items, each with a concrete next-step verb (fix, verify, send, review, build…). Never include "ignore X", "don't do Y", "X is stale", or equivalent dismissal work. Dismissed, deleted, ignored, and resolved items are omitted silently. If everything is handled, say so in one line.
+  - GitHub work radar is read-only and is populated only for work-priority questions. Treat context.priorityContext.github.items as candidates alongside memories and jobs. For a green, mergeable PR use the concrete form "Review/merge PR #N — CI green"; for a failing PR use "PR #N failing CI"; for a failing default branch check use "main is failing on X". Open issues may be surfaced as "Review issue #N — title". Never auto-merge, auto-push, or auto-fix from the radar; David decides when to merge. If the GitHub radar is empty, omit it silently.
+  - GitHub priority radar data is empty when GITHUB_TOKEN is unset; do not mention the missing token or produce integration-error noise.
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
 - Live portfolio state:
 ${JSON.stringify(context.portfolioState, null, 2)}
+- GitHub work radar (populated only for work-priority questions):
+${JSON.stringify(context.priorityContext?.github || { repos: [], items: [] }, null, 2)}
 - Derived portfolio guidance (when present):
 ${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
@@ -481,7 +553,7 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
 async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
-  const context = await getAgentContext();
+  const context = await getAgentContext(pool, { includeGithub: isWorkPriorityQuestion(message) });
   const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(id => Number.isInteger(id)))];
   if (ids.length > MAX_FILES_PER_MESSAGE) throw new Error('You can attach up to 5 Excel/CSV files per message.');
   const excelFiles = [];
@@ -912,4 +984,4 @@ if (require.main === module) {
   }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
 }
 
-module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, agentSystemPrompt, emailHtml };
+module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
