@@ -130,7 +130,7 @@ const deleteHoldingTool = {
       holding_id: { type: ['number','null'], description: 'Holding id to delete, or null to delete all manual holdings.' },
       delete_all_manual: { type: 'boolean', description: 'Set true to delete every manual holding.' }
     },
-    required: ['delete_all_manual'],
+    required: ['holding_id','delete_all_manual'],
     additionalProperties: false
   }
 };
@@ -243,7 +243,7 @@ const excelDeleteTool = {
 
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
-  excel_analysis: ['save_memory','get_personal_context','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
+  excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
@@ -255,6 +255,7 @@ const JOB_SKILLS = Object.freeze({
 function inferJob(message = '', hasFiles = false) {
   const text = String(message).toLowerCase();
   if (hasFiles) return 'excel_analysis';
+  if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
   if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
