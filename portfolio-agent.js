@@ -200,6 +200,8 @@ async function composeNotification(briefing, gate) {
   return fallbackNotification(briefing, gate);
 }
 
+const PORTFOLIO_NOTIFICATION_SUBJECT = 'Jarvis — portfolio alert';
+
 async function sendNotification(message) {
   if (!process.env.RESEND_API_KEY || !process.env.REMINDER_EMAIL) {
     throw new Error('Email notification is not configured.');
@@ -211,7 +213,7 @@ async function sendNotification(message) {
     body: JSON.stringify({
       from,
       to: [process.env.REMINDER_EMAIL],
-      subject: 'Personal Agent — portfolio alert',
+      subject: PORTFOLIO_NOTIFICATION_SUBJECT,
       text: message,
       html: `<p>${message.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
     })
@@ -252,7 +254,7 @@ async function runDailyPortfolioAgent({ pool, getPortfolioSummary, now = new Dat
   return { ok: true, asOf, gate, notificationSent, briefing, thresholdPct };
 }
 
-module.exports = {
+module.exports = { PORTFOLIO_NOTIFICATION_SUBJECT,
   CHICAGO_TZ,
   DEFAULT_PCT_THRESHOLD,
   DEFAULT_DOLLAR_THRESHOLD,
