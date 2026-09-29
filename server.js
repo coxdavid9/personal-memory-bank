@@ -405,7 +405,7 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext();
-  const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(Number.isInteger && Number.isFinite))];
+  const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(id => Number.isInteger(id)))];
   if (ids.length > MAX_FILES_PER_MESSAGE) throw new Error('You can attach up to 5 Excel/CSV files per message.');
   const excelFiles = [];
   let totalBytes = 0;
@@ -423,9 +423,9 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const userContent = image
     ? [{ type: 'input_text', text: String(message || '').trim().slice(0, 10000) || 'Please analyze this image.' }, { type: 'input_image', image_url: image, detail: 'auto' }]
     : String(message || '').trim().slice(0, 10000);
-  if (!String(message || '').trim() && !image) throw new Error('Message or image is required.');
+  if (!String(message || '').trim() && !image && !excelFiles.length) throw new Error('Message, image, or Excel file is required.');
   const input = [
-    { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks) },
+    { role: 'system', content: agentSystemPrompt(context, teamRoles, recentTeamTasks, excelFiles) },
     ...recent.map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: userContent },
   ];
@@ -486,10 +486,24 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
         getPortfolioSummary,
         getJobApplicationHistory,
         saveJobApplication,
+        getExcelFile,
+        profileExcelFile: profileFile,
+        queryExcelFile,
+        buildExcelWorkbook: buildWorkbook,
+        createExcelFile,
+        deleteExcelFile,
+        excelUploadDir: UPLOAD_DIR,
         caldav,
         github,
         renderOps,
         delegateToTeam,
+        getExcelFile,
+        profileExcelFile: profileFile,
+        queryExcelFile,
+        buildExcelWorkbook: buildWorkbook,
+        createExcelFile,
+        deleteExcelFile,
+        excelUploadDir: UPLOAD_DIR,
         callSpecialist: (args) => callSpecialist({ ...args, runId: `chat_${Date.now()}`, onAction: action => actions.push(action) }),
         onAction: (action) => actions.push(action),
         runId: `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
