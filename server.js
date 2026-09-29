@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { buildCalDAVClientFromEnv } = require('./caldav');
-const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, isStalePortfolioGuidance } = require('./portfolio');
+const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
@@ -279,10 +279,10 @@ async function getAgentContext(db = pool) {
                 COUNT(*) FILTER (WHERE source='plaid')::int AS "plaidCount"
               FROM holdings`),
   ]);
-  const portfolioState = {
-    manualCount: Number(portfolio.rows[0]?.manualCount || 0),
-    plaidCount: Number(portfolio.rows[0]?.plaidCount || 0)
-  };
+  const portfolioState = buildPortfolioContext({
+    manualCount: portfolio.rows[0]?.manualCount,
+    plaidCount: portfolio.rows[0]?.plaidCount
+  });
   const currentMemories = memories.rows.filter(row => !isStalePortfolioGuidance(row.text));
   const actionableMemories = currentMemories.filter(row => !row.done && !isDismissedJobText(row.text));
   return {
@@ -290,9 +290,7 @@ async function getAgentContext(db = pool) {
     projects: projects.rows,
     capabilities: capabilities.rows,
     portfolioState,
-    portfolioGuidance: portfolioState.manualCount > 0
-      ? 'Manual holdings are present. If discussing their values or reliability, verify the live portfolio state before making current-state claims.'
-      : null,
+    portfolioGuidance: portfolioState.guidance,
     priorityContext: { memories: actionableMemories, jobs: jobs.rows }
   };
 }
