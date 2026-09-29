@@ -152,6 +152,18 @@ async function getPortfolioSummary(pool) {
   return { totalValue, totalIncomplete, dayChange, dayChangePct, accounts, holdings, stale, connections:connections.rows, asOf:today };
 }
 
+function buildPortfolioContext(state = {}) {
+  const manualCount = Math.max(0, Number(state.manualCount) || 0);
+  const plaidCount = Math.max(0, Number(state.plaidCount) || 0);
+  return {
+    manualCount,
+    plaidCount,
+    guidance: manualCount > 0
+      ? 'Manual holdings are present. If discussing their values or reliability, verify the live portfolio state before making current-state claims.'
+      : null
+  };
+}
+
 function isStalePortfolioGuidance(text) {
   return /\b(?:fake\s+(?:manual|portfolio|investment)\s+(?:numbers|balances|values)|manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers)\s+(?:are\s+)?(?:fake|stale|unreliable)|(?:don't|do not)\s+(?:rely on|use)\s+(?:the\s+)?(?:current\s+)?manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers))\b/i.test(String(text || ''));
 }
@@ -191,4 +203,4 @@ async function deleteManualHoldings(pool) {
   return { ok:true, deleted:r.rowCount };
 }
 
-module.exports={initPortfolioDb,recordHolding,getPortfolioSummary,deleteHolding,deleteManualHoldings,isStalePortfolioGuidance,retireStalePortfolioGuidance};
+module.exports={initPortfolioDb,recordHolding,getPortfolioSummary,deleteHolding,deleteManualHoldings,buildPortfolioContext,isStalePortfolioGuidance,retireStalePortfolioGuidance};
