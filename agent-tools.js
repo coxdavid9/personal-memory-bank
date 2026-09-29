@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { executeSkill } = require('./policy');
 
 const IMAGE_DATA_URL_RE = /^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
