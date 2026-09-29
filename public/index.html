@@ -63,12 +63,8 @@ main{max-width:1180px;margin:0 auto;padding:18px}
     <div><h2>Talk to your agent</h2><div class="muted">Ask questions, work through ideas, or tell me what you want to get done.</div></div>
   </div>
   <div id="messages" class="messages"></div>
-  <div class="quick">
-    <button class="btn secondary" onclick="quick('What should I be working on right now?')">What should I work on?</button>
-    <button class="btn secondary" onclick="quick('What do you know about ClearCFO?')">ClearCFO status</button>
-    <button class="btn secondary" onclick="quick('What do you know about my job search?')">Job search</button>
-  </div>
-  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*" style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" onclick="document.getElementById('imageFile').click()">📎 Image</button><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+  <div id="suggestions" class="quick" style="display:none"></div>
+  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" aria-label="Attach" title="Attach" onclick="document.getElementById('imageFile').click()">📎</button><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
 </section>
 </div>
 </main>
@@ -169,6 +165,16 @@ async function syncChat(){
    if(changed)renderMessages();
  }catch(e){}finally{chatSyncBusy=false;}
 }
+async function loadSuggestions(){
+  try{
+    const data=await api('/api/suggestions');
+    const el=document.getElementById('suggestions');
+    const items=data.suggestions||[];
+    if(!items.length){el.style.display='none';el.innerHTML='';return;}
+    el.innerHTML=items.slice(0,3).map(s=>'<button class="btn secondary" onclick="quick('+JSON.stringify(String(s.prompt||''))+')">'+esc(s.label||'Suggestion')+'</button>').join('');
+    el.style.display='flex';
+  }catch(e){const el=document.getElementById('suggestions');if(el){el.style.display='none';el.innerHTML='';}}
+}
 async function load(){
  const setError=(id,e)=>{document.getElementById(id).innerHTML='<div class="muted">Unable to load: '+esc(e.message)+'</div>'};
  await Promise.all([
@@ -178,7 +184,8 @@ async function load(){
      document.getElementById('projects').innerHTML=ctx.projects.map(p=>`<div class="cap"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.description)}</span></div>`).join('');
    }).catch(e=>{setError('caps',e);setError('projects',e)}),
    api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages(true)}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
-   loadApprovals().catch(e=>setError('approvals',e))
+   loadApprovals().catch(e=>setError('approvals',e)),
+   loadSuggestions().catch(()=>{})
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
