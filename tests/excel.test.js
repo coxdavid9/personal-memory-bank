@@ -14,6 +14,10 @@ function assertTypedSchema(node, pathLabel = 'schema') {
   assert.ok(Object.prototype.hasOwnProperty.call(node, 'type'), `${pathLabel} is missing type`);
 
   if (node.properties) {
+    assert.ok(Array.isArray(node.required), `${pathLabel} is missing required`);
+    for (const key of Object.keys(node.properties)) {
+      assert.ok(node.required.includes(key), `${pathLabel}.required is missing ${key}`);
+    }
     for (const [key, child] of Object.entries(node.properties)) {
       assertTypedSchema(child, `${pathLabel}.properties.${key}`);
     }
@@ -44,6 +48,12 @@ test('Excel tools use the intended policy tiers', () => {
 });
 
 test('Excel files route the agent to the Excel skill', () => {
+  const jobWorkbookPrompt = 'Create an Excel workbook of my job applications';
+  assert.equal(inferJob(jobWorkbookPrompt), 'excel_analysis');
+  const jobWorkbookTools = buildAgentTools({ job: 'excel_analysis' }).map(tool => tool.name);
+  assert.ok(jobWorkbookTools.includes('excel_build'));
+  assert.ok(jobWorkbookTools.includes('get_job_application_history'));
+  assert.ok(jobWorkbookTools.includes('get_portfolio_summary'));
   assert.equal(inferJob('what is in this file?', true), 'excel_analysis');
   const names = buildAgentTools({ job: 'excel_analysis' }).map(tool => tool.name);
   assert.ok(names.includes('excel_summary'));
