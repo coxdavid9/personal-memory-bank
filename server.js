@@ -912,4 +912,4 @@ if (require.main === module) {
   }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
 }
 
-module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision };
+module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, agentSystemPrompt, emailHtml };
