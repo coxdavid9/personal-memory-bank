@@ -441,7 +441,7 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   throw new Error('Engineering specialist reached its tool-call limit.');
 }
 
-function buildToolDeps({ actions = [], runId = null, skipPolicy = false } = {}) {
+function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrides = {} } = {}) {
   const resolvedRunId = runId || `chat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
   return {
     pool,
@@ -470,7 +470,8 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false } = {}) 
     callSpecialist: (args) => callSpecialist({ ...args, runId: resolvedRunId, onAction: action => actions.push(action) }),
     onAction: action => actions.push(action),
     runId: resolvedRunId,
-    skipPolicy
+    skipPolicy,
+    ...overrides
   };
 }
 
