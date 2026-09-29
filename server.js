@@ -681,6 +681,27 @@ app.get('/api/team', async (req, res) => {
   }
 });
 
+app.get('/api/suggestions', async (req,res) => {
+  if (!pool) return res.json({ suggestions: [] });
+  try {
+    const [approvals, reminders] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS count FROM tool_approvals WHERE status='pending' AND expires_at>NOW()"),
+      pool.query("SELECT COUNT(*)::int AS count FROM memories WHERE done=false AND due_at IS NOT NULL AND due_at >= CURRENT_DATE AND due_at < CURRENT_DATE + INTERVAL '1 day'")
+    ]);
+    const suggestions=[];
+    const approvalCount=approvals.rows[0]?.count||0;
+    const reminderCount=reminders.rows[0]?.count||0;
+    const hour=new Date().toLocaleString('en-US',{hour:'numeric',hour12:false,timeZone:'America/Chicago'});
+    if(approvalCount) suggestions.push({label: approvalCount===1?'Review approval':'Review approvals', prompt:'What approvals are waiting for me?'});
+    if(reminderCount) suggestions.push({label:'Today’s reminders',prompt:'What do I need to handle today?'});
+    if(!suggestions.length && Number(hour)>=8 && Number(hour)<12) {
+      const recent=await pool.query("SELECT COUNT(*)::int AS count FROM agent_messages WHERE role='user' AND created_at>=CURRENT_DATE");
+      if((recent.rows[0]?.count||0)>0) suggestions.push({label:'Plan today',prompt:'Based on what I have going on, what should I focus on today?'});
+    }
+    res.json({suggestions:suggestions.slice(0,3)});
+  } catch(err) { console.error('Suggestions failed:',err); res.status(500).json({error:'Unable to load suggestions.'}); }
+});
+
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
