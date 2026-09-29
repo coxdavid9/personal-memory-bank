@@ -151,8 +151,97 @@ const delegateTeamTool = {
   }
 };
 
+
+const excelSummaryTool = {
+  type: 'function',
+  name: 'excel_summary',
+  description: 'Return the structural profile of an uploaded Excel or CSV file. Use this to understand sheets, row counts, columns, detected types, and samples without dumping the raw table.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: { file_id: { type: 'integer', description: 'Uploaded source file id.' } },
+    required: ['file_id'],
+    additionalProperties: false
+  }
+};
+
+const excelQueryTool = {
+  type: 'function',
+  name: 'excel_query',
+  description: 'Deterministically compute over an uploaded Excel or CSV file. Supported operations: sum, avg, min, max, group_by, top_n, filter. All arithmetic happens in the tool, not in the model.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      file_id: { type: 'integer', description: 'Uploaded source file id.' },
+      sheet: { type: 'string', description: 'Exact sheet name, or CSV for a CSV file.' },
+      operation: { type: 'string', enum: ['sum','avg','min','max','group_by','top_n','filter'], description: 'Deterministic operation.' },
+      column: { type: ['string','null'], description: 'Numeric/value column for the operation.' },
+      group_by: { type: ['string','null'], description: 'Column to group by when operation is group_by.' },
+      limit: { type: 'integer', description: 'Maximum rows/groups returned.' },
+      filters: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            column: { type: 'string' },
+            op: { type: 'string', enum: ['eq','contains','gt','gte','lt','lte'] },
+            value: { type: ['string','number','null'] }
+          },
+          required: ['column','op','value'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['file_id','sheet','operation','column','group_by','limit','filters'],
+    additionalProperties: false
+  }
+};
+
+const excelBuildTool = {
+  type: 'function',
+  name: 'excel_build',
+  description: 'Generate a new Excel workbook from a JSON workbook specification and return a download action. Use for requested summaries, analysis workbooks, and follow-up deliverables.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Output workbook filename.' },
+      sheets: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            headers: { type: 'array', items: { type: 'string' } },
+            rows: { type: 'array', items: { type: 'array', items: {} } }
+          },
+          required: ['name','headers','rows'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['name','sheets'],
+    additionalProperties: false
+  }
+};
+
+const excelDeleteTool = {
+  type: 'function',
+  name: 'excel_delete',
+  description: 'Delete an uploaded source Excel/CSV file. This action requires David approval and never deletes generated workbooks through the chat tool.',
+  strict: true,
+  parameters: {
+    type: 'object',
+    properties: { file_id: { type: 'integer', description: 'Uploaded source file id.' } },
+    required: ['file_id'],
+    additionalProperties: false
+  }
+};
+
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
+  excel_analysis: ['save_memory','get_personal_context','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
@@ -161,8 +250,9 @@ const JOB_SKILLS = Object.freeze({
   product: ['save_memory','get_personal_context','delegate_to_team']
 });
 
-function inferJob(message = '') {
+function inferJob(message = '', hasFiles = false) {
   const text = String(message).toLowerCase();
+  if (hasFiles) return 'excel_analysis';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
   if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
@@ -172,7 +262,7 @@ function inferJob(message = '') {
 }
 
 function buildAgentTools({ job = 'general' } = {}) {
-  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool];
+  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const selected = all.filter(tool => allowed.has(tool.name));
   if (job === 'job_search') selected.push({ type: 'web_search_preview' });
@@ -209,6 +299,30 @@ async function executeAgentTool(name, args, deps) {
     if (!deps.delegateToTeam || !deps.callSpecialist) return { ok: false, error: 'The internal team is not configured.' };
     return run('delegate_to_team', () => deps.delegateToTeam({ pool: deps.pool, roleKey: args.role, task: args.task, project: args.project, context: args.context, callOpenAI: deps.callSpecialist }));
   }
+
+
+  if (name === 'excel_summary') return run('excel_summary', async () => {
+    const file = await deps.getExcelFile(deps.pool, args.file_id, 'source');
+    if (!file) return { ok: false, error: 'Uploaded Excel file not found or expired.' };
+    return { ok: true, file: { id:file.id, name:file.name, size_bytes:Number(file.size_bytes), sheet_names:file.sheet_names, total_rows:file.total_rows }, profile: await deps.profileExcelFile(file.path, file.name) };
+  });
+  if (name === 'excel_query') return run('excel_query', async () => {
+    const file = await deps.getExcelFile(deps.pool, args.file_id, 'source');
+    if (!file) return { ok: false, error: 'Uploaded Excel file not found or expired.' };
+    return { ok: true, file: { id:file.id, name:file.name }, result: await deps.queryExcelFile(file.path, file.name, args) };
+  });
+  if (name === 'excel_build') return run('excel_build', async () => {
+    if (!deps.pool) return { ok:false, error:'Persistent storage is not configured.' };
+    const name = String(args.name || 'analysis.xlsx').replace(/[^a-zA-Z0-9._-]/g,'_').replace(/\.xlsx$/i,'') + '.xlsx';
+    const tempPath = path.join(deps.excelUploadDir, 'generated-' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '.xlsx');
+    await deps.buildExcelWorkbook(tempPath, { sheets: args.sheets || [] });
+    const stat = await fs.promises.stat(tempPath);
+    const row = await deps.createExcelFile(deps.pool, { name, sizeBytes: stat.size, path: tempPath, profile: { sheets: (args.sheets || []).map(s => ({ name:s.name })), total_rows: (args.sheets || []).reduce((n,s)=>n+(s.rows||[]).length,n) }, mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', kind:'generated' });
+    const action = { type:'file_download', fileId:row.id, name:row.name, url:'/api/files/'+row.id+'/download' };
+    if (deps.onAction) deps.onAction(action);
+    return { ok:true, file:row, action };
+  });
+  if (name === 'excel_delete') return run('excel_delete', () => deps.deleteExcelFile(deps.pool, args.file_id));
 
   if (name === 'get_job_application_history') return run('get_job_application_history', () => deps.getJobApplicationHistory(deps.pool));
   if (name === 'save_job_application') return run('save_job_application', () => deps.saveJobApplication(deps.pool, args));
