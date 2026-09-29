@@ -324,7 +324,7 @@ Architecture rules:
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
 - Live portfolio state:
-{"manualCount":0,"plaidCount":0}
+${JSON.stringify(context.portfolioState, null, 2)}
 - Derived portfolio guidance (when present):
 ${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
