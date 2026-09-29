@@ -11,7 +11,7 @@ const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-ag
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
-const { initJobSearchDb, getJobApplicationHistory, saveJobApplication } = require('./job-search');
+const { initJobSearchDb, getJobApplicationHistory, saveJobApplication, isDismissedJobText } = require('./job-search');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 const { buildSuggestions } = require('./suggestions');
@@ -264,13 +264,23 @@ async function cancelReminderEmail(emailId) {
 }
 
 async function getAgentContext() {
-  if (!pool) return { memories: [], projects: [], capabilities: [] };
-  const [memories, projects, capabilities] = await Promise.all([
+  if (!pool) return { memories: [], projects: [], capabilities: [], priorityContext: { memories: [], jobs: [] } };
+  const [memories, projects, capabilities, jobs] = await Promise.all([
     pool.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
     pool.query(`SELECT id, name, description, status FROM agent_projects ORDER BY name`),
     pool.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
+    pool.query(`SELECT id, created_at AS created, updated_at AS updated, title, company, location, url, status, notes
+               FROM job_applications
+               WHERE status NOT IN ('ignore','rejected')
+               ORDER BY updated_at DESC LIMIT 100`),
   ]);
-  return { memories: memories.rows, projects: projects.rows, capabilities: capabilities.rows };
+  const actionableMemories = memories.rows.filter(row => !row.done && !isDismissedJobText(row.text));
+  return {
+    memories: memories.rows,
+    projects: projects.rows,
+    capabilities: capabilities.rows,
+    priorityContext: { memories: actionableMemories, jobs: jobs.rows }
+  };
 }
 
 function loadAgentOperatingFiles() {
@@ -294,6 +304,8 @@ Architecture rules:
   - Before writing any applied, rejected, excluded, saved, or ignored job record from numbered references, echo the resolved mapping as number -> exact title + company and ask David to confirm it. Do not silently write records from an initial numbered-reference message.
   - For corrections, re-read the source user message(s) supporting each surviving record. Quote the relevant wording in the confirmation. If a surviving record is not supported by a source quote, drop it and ask David to restate/confirm it rather than defending the record from memory.
   - Treat job records as structured state: applied, excluded/rejected, and considering/saved. Applied and excluded/rejected roles must be suppressed from future job lead lists.
+  - Priority hygiene is strict: when David asks what he should work on, use only context.priorityContext as the candidate pool. List only actionable items, each with a concrete next-step verb (fix, verify, send, review, build…). Never include "ignore X", "don't do Y", "X is stale", or equivalent dismissal work. Dismissed, deleted, ignored, and resolved items are omitted silently. If everything is handled, say so in one line.
+  - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
@@ -657,19 +669,16 @@ app.get('/api/team', async (req, res) => {
 app.get('/api/suggestions', async (req,res) => {
   if (!pool) return res.json({ suggestions: [] });
   try {
-    const [approvals, reminders] = await Promise.all([
+    const [approvals, reminders, actionable] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS count FROM tool_approvals WHERE status='pending' AND expires_at>NOW()"),
-      pool.query("SELECT COUNT(*)::int AS count FROM memories WHERE done=false AND due_at IS NOT NULL AND due_at >= CURRENT_DATE AND due_at < CURRENT_DATE + INTERVAL '1 day'")
+      pool.query("SELECT COUNT(*)::int AS count FROM memories WHERE done=false AND due_at IS NOT NULL AND due_at >= CURRENT_DATE AND due_at < CURRENT_DATE + INTERVAL '1 day' AND LOWER(text) NOT LIKE '%stale%' AND LOWER(text) NOT LIKE '%ignore%' AND LOWER(text) NOT LIKE '%dismiss%' AND LOWER(text) NOT LIKE '%resolved%'"),
+      pool.query("SELECT COUNT(*)::int AS count FROM job_applications WHERE status NOT IN ('ignore','rejected')")
     ]);
     const approvalCount=approvals.rows[0]?.count||0;
     const reminderCount=reminders.rows[0]?.count||0;
+    const actionableCount=(actionable.rows[0]?.count||0);
     const hour=new Date().toLocaleString('en-US',{hour:'numeric',hour12:false,timeZone:'America/Chicago'});
-    let recentUserCount=0;
-    if(Number(approvalCount)===0 && Number(reminderCount)===0) {
-      const recent=await pool.query("SELECT COUNT(*)::int AS count FROM agent_messages WHERE role='user' AND created_at>=CURRENT_DATE");
-      recentUserCount=recent.rows[0]?.count||0;
-    }
-    res.json({suggestions:buildSuggestions({approvalCount,reminderCount,recentUserCount,hour})});
+    res.json({suggestions:buildSuggestions({approvalCount,reminderCount,actionableCount,hour})});
   } catch(err) { console.error('Suggestions failed:',err); res.status(500).json({error:'Unable to load suggestions.'}); }
 });
 
