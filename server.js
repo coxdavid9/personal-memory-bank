@@ -735,7 +735,7 @@ const excelUpload = multer({
     filename: (_req, file, cb) => cb(null, `upload-${Date.now()}-${crypto.randomBytes(8).toString('hex')}-${safeFileName(file.originalname)}`)
   }),
   limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_MESSAGE, parts: MAX_FILES_PER_MESSAGE + 2 },
-  fileFilter: (_req, file, cb) => cb(null, isSpreadsheetName(file.originalname))
+  fileFilter: (_req, file, cb) => isSpreadsheetName(file.originalname) ? cb(null, true) : cb(new Error(`"${file.originalname}" is not an Excel/CSV file. Excel/CSV uploads only.`))
 });
 
 app.post('/api/files', (req, res) => {
