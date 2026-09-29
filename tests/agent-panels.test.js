@@ -73,6 +73,18 @@ test('Jarvis v3 UI wiring is present and purple legacy accents are gone', () => 
 });
 
 
+test('chat paste handler routes clipboard images through the attachment flow', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(html, /async function attachImageFile\(file\)/);
+  assert.match(html, /function handleImagePaste\(event\)/);
+  assert.match(html, /event\.clipboardData\?\.items/);
+  assert.match(html, /items\.find\(item=>item\.type\.startsWith\('image\\/ '\)/);
+  assert.match(html, /event\.preventDefault\(\)/);
+  assert.match(html, /void attachImageFile\(file\)/);
+  assert.match(html, /messageInput\.addEventListener\('paste',handleImagePaste\)/);
+  assert.match(html, /document\.addEventListener\('paste',handleImagePaste\)/);
+});
+
 test('Jarvis identity is consistent across prompt and notification surfaces', () => {
   const prompt = agentSystemPrompt({ memories: [], projects: [], capabilities: [], portfolioState: { manualCount: 0, plaidCount: 0 }, priorityContext: { memories: [], jobs: [] } });
   const reminder = emailHtml({ text: 'Test reminder', type: 'Work', priority: 'Normal', due: new Date().toISOString() });
