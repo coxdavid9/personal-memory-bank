@@ -77,7 +77,8 @@ test('chat paste handler routes clipboard images through the attachment flow', (
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(html, /async function attachImageFile\(file\)/);
   assert.match(html, /function handleImagePaste\(event\)/);
-  assert.match(html, /event\.clipboardData\?\.items/);
+  assert.ok(html.includes('clipboardData'));
+  assert.ok(html.includes("type.startsWith('image/'));");
   assert.match(html, /clipboardData.*image\\//);
   assert.match(html, /event\.preventDefault\(\)/);
   assert.match(html, /void attachImageFile\(file\)/);
