@@ -10,6 +10,7 @@ test('deleteHolding only removes manual holdings', async () => {
   const calls = [];
   const pool = { query: async (sql, params) => {
     calls.push({ sql, params });
+    if (/COUNT\(\*\).*source='manual'/i.test(sql)) return { rows: [{ count: 1 }] };
     return { rowCount: 1 };
   }};
   const result = await deleteHolding(pool, 42);
@@ -19,9 +20,14 @@ test('deleteHolding only removes manual holdings', async () => {
 });
 
 test('deleteManualHoldings targets manual rows only and returns count', async () => {
+  let step = 0;
   const pool = { query: async (sql) => {
     assert.match(sql, /source\s*=\s*'manual'/i);
-    return { rowCount: 3 };
+    step += 1;
+    if (step === 1) return { rowCount: 3 };
+    if (step === 2) return { rows: [] };
+    if (step === 3) return { rowCount: 1 };
+    throw new Error('Unexpected query');
   }};
   assert.deepEqual(await deleteManualHoldings(pool), { ok: true, deleted: 3 });
 });
