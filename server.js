@@ -322,7 +322,13 @@ ${JSON.stringify(recentTeamTasks, null, 2)}
 Team rules: The team is private to David. It is for building and operating David's projects, not for ClearCFO customers. Delegate concrete work to specialists instead of pretending you personally completed external actions.
 
 Relevant memory:
-${JSON.stringify(context.memories, null, 2)}`;
+${JSON.stringify(context.memories, null, 2)}
+
+Uploaded Excel files available for this turn:
+${JSON.stringify(excelFiles, null, 2)}
+
+Excel rules: when files are attached, use excel_summary first if the user has not asked a specific question; use excel_query for all arithmetic; never treat missing or empty cells as zero; do not dump raw tables into chat; when David asks for a workbook, use excel_build and provide the generated download action.
+`;
 }
 
 async function callSpecialist({ roleKey, system, user, runId, onAction }) {
