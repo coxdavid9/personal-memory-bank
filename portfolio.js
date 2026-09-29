@@ -152,18 +152,43 @@ async function getPortfolioSummary(pool) {
   return { totalValue, totalIncomplete, dayChange, dayChangePct, accounts, holdings, stale, connections:connections.rows, asOf:today };
 }
 
+function isStalePortfolioGuidance(text) {
+  return /\b(?:fake\s+(?:manual|portfolio|investment)\s+(?:numbers|balances|values)|manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers)\s+(?:are\s+)?(?:fake|stale|unreliable)|(?:don't|do not)\s+(?:rely on|use)\s+(?:the\s+)?(?:current\s+)?manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers))\b/i.test(String(text || ''));
+}
+
+function chicagoDateString(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+async function retireStalePortfolioGuidance(pool) {
+  if (!pool) return { retired: 0, supersedingNoteCreated: false };
+  const result = await pool.query(
+    "UPDATE memories SET done=true WHERE done=false AND lower(text) ~ '(fake[[:space:]]+(manual|portfolio|investment)[[:space:]]+(numbers|balances|values)|manual[[:space:]]+(numbers|balances|portfolio[[:space:]]+(numbers|values)|investment[[:space:]]+numbers)[[:space:]]+(are[[:space:]]+)?(fake|stale|unreliable)|do[[:space:]]+not[[:space:]]+rely[[:space:]]+on[[:space:]]+(the[[:space:]]+)?(current[[:space:]]+)?manual[[:space:]]+(numbers|balances|portfolio[[:space:]]+(numbers|values)|investment[[:space:]]+numbers)|don.t[[:space:]]+rely[[:space:]]+on[[:space:]]+(the[[:space:]]+)?(current[[:space:]]+)?manual[[:space:]]+(numbers|balances|portfolio[[:space:]]+(numbers|values)|investment[[:space:]]+numbers))'",
+    []
+  );
+  const note = 'Manual holdings deleted ' + chicagoDateString() + '; none remain. Portfolio is empty pending Plaid.';
+  const existing = await pool.query('SELECT id FROM memories WHERE done=false AND text=$1 LIMIT 1', [note]);
+  if (!existing.rows[0]) {
+    await pool.query('INSERT INTO memories(text,type,priority) VALUES($1,$2,$3)', [note, 'Portfolio', 'Normal']);
+  }
+  return { retired: result.rowCount || 0, supersedingNoteCreated: !existing.rows[0] };
+}
 async function deleteHolding(pool, id) {
   if (!pool) return { ok:false, error:'Persistent storage is not configured.' };
   const holdingId = Number(id);
   if (!Number.isInteger(holdingId) || holdingId <= 0) return { ok:false, error:'Holding id must be a positive integer.' };
   const r = await pool.query('DELETE FROM holdings WHERE id = $1 AND source = \'manual\'', [holdingId]);
-  return { ok: r.rowCount > 0 };
+  if (!r.rowCount) return { ok:false };
+  const remaining = await pool.query("SELECT COUNT(*)::int AS count FROM holdings WHERE source='manual'");
+  if (Number(remaining.rows[0]?.count || 0) === 0) await retireStalePortfolioGuidance(pool);
+  return { ok:true };
 }
 
 async function deleteManualHoldings(pool) {
   if (!pool) return { ok:false, error:'Persistent storage is not configured.' };
   const r = await pool.query("DELETE FROM holdings WHERE source = 'manual'");
+  await retireStalePortfolioGuidance(pool);
   return { ok:true, deleted:r.rowCount };
 }
 
-module.exports={initPortfolioDb,recordHolding,getPortfolioSummary,deleteHolding,deleteManualHoldings};
+module.exports={initPortfolioDb,recordHolding,getPortfolioSummary,deleteHolding,deleteManualHoldings,isStalePortfolioGuidance,retireStalePortfolioGuidance};
