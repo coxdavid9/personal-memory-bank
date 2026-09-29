@@ -216,7 +216,7 @@ const excelBuildTool = {
           properties: {
             name: { type: 'string' },
             headers: { type: 'array', items: { type: 'string' } },
-            rows: { type: 'array', items: { type: 'array', items: {} } }
+            rows: { type: 'array', items: { type: 'array', items: { type: ['string','number','boolean','null'] } } }
           },
           required: ['name','headers','rows'],
           additionalProperties: false
