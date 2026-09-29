@@ -165,7 +165,7 @@ function buildPortfolioContext(state = {}) {
 }
 
 function isStalePortfolioGuidance(text) {
-  return /\b(?:fake\s+(?:manual|portfolio|investment)\s+(?:numbers|balances|values)|manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers)\s+(?:are\s+)?(?:fake|stale|unreliable)|(?:don't|do not)\s+(?:rely on|use)\s+(?:the\s+)?(?:current\s+)?manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers))\b/i.test(String(text || ''));
+  return /\b(?:fake\s+(?:manual|portfolio|investment)\s+(?:numbers|balances|values)|manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers)\s+(?:are\s+)?(?:fake|stale|unreliable)|(?:don['’]t|do not)\s+(?:rely on|use)\s+(?:the\s+)?(?:current\s+)?manual\s+(?:numbers|balances|portfolio\s+(?:numbers|values)|investment\s+numbers))\b/i.test(String(text || ''));
 }
 
 function chicagoDateString(date = new Date()) {
