@@ -81,30 +81,29 @@ async function profileXlsx(filePath) {
     let header = null;
     let headerRow = null;
     let rows = 0;
-    let columns = [];
-    let sample = [];
+    const samplesByColumn = [];
+    const sample = [];
     for await (const row of worksheet) {
-      rows += 1;
       const vals = row.values.slice(1).map(normalizeCell);
       if (!header && vals.some(v => v !== null && String(v).trim() !== '')) {
         header = vals.map((v, i) => String(v ?? `Column ${i + 1}`).trim() || `Column ${i + 1}`);
         headerRow = row.number;
-        columns = header.map((name, i) => ({ name, type: detectType([vals[i]]) }));
-      } else if (header && sample.length < 3) {
-        const obj = {};
-        header.forEach((name, i) => { obj[name] = vals[i] ?? null; });
-        sample.push(obj);
-      }
-      if (header && rows <= 200) {
-        header.forEach((_, i) => { columns[i].type = detectType([columns[i].type === 'number' ? 1 : null, vals[i]]); });
+        header.forEach(() => samplesByColumn.push([]));
+      } else if (header) {
+        rows += 1;
+        if (sample.length < 3) {
+          const obj = {};
+          header.forEach((name, i) => { obj[name] = vals[i] ?? null; });
+          sample.push(obj);
+        }
+        if (rows <= 200) header.forEach((_, i) => samplesByColumn[i].push(vals[i] ?? null));
       }
     }
-    const width = header ? header.length : 0;
-    sheets.push({ name: worksheet.name, rows: Math.max(0, rows - (headerRow ? 1 : 0)), dimensions: { rows, columns: width }, header_row: headerRow, columns, sample });
+    const columns = (header || []).map((name, i) => ({ name, type: detectType(samplesByColumn[i] || []) }));
+    sheets.push({ name: worksheet.name, rows, dimensions: { rows: rows + (headerRow ? 1 : 0), columns: (header || []).length }, header_row: headerRow, columns, sample });
   }
   return { sheets, total_rows: sheets.reduce((n, s) => n + s.rows, 0) };
 }
-
 function splitCsvLine(line) {
   const out=[]; let cur=''; let quoted=false;
   for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(quoted && line[i+1]==='"'){cur+='"';i++;} else quoted=!quoted; } else if(ch===','&&!quoted){out.push(cur);cur='';} else cur+=ch; }
@@ -214,14 +213,15 @@ async function buildWorkbook(outputPath,spec) {
   for(const sheetSpec of (spec.sheets||[])){
     const ws=workbook.addWorksheet(String(sheetSpec.name||'Sheet').slice(0,31));
     const headers=Array.isArray(sheetSpec.headers)?sheetSpec.headers:[];
-    if(headers.length) ws.addRow(headers);
+    if(headers.length) {
+      ws.columns=headers.map(h=>({header:h,key:String(h),width:Math.min(42,Math.max(12,String(h).length+2))}));
+      ws.getRow(1).font={bold:true};
+      ws.views=[{state:'frozen',ySplit:1}];
+    }
     for(const row of (sheetSpec.rows||[])) ws.addRow(Array.isArray(row)?row:headers.map(h=>row?.[h]??null));
-    if(headers.length){ws.getRow(1).font={bold:true};ws.views=[{state:'frozen',ySplit:1}];}
-    ws.columns=(headers||[]).map(h=>({header:h,key:String(h),width:Math.min(42,Math.max(12,String(h).length+2))}));
   }
   await workbook.xlsx.writeFile(outputPath);
 }
-
 async function initExcelDb(pool) {
   if(!pool)return;
   ensureUploadDir();
