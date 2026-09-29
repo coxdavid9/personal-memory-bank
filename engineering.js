@@ -67,6 +67,75 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
     return request(`/repos/${targetRepo}/issues?state=${encodeURIComponent(state)}&per_page=30`);
   }
 
+  async function listBranchCheckRuns(branch = 'main', requestedRepo) {
+    const targetRepo = resolveRepo(requestedRepo);
+    const data = await request(`/repos/${targetRepo}/commits/${encodeURIComponent(branch)}/check-runs?per_page=50`);
+    return data.check_runs || [];
+  }
+
+  function summarizeCi(checks = []) {
+    if (!checks.length) return 'unknown';
+    if (checks.some(check => ['failure','cancelled','timed_out','action_required','startup_failure'].includes(check.conclusion))) return 'failing';
+    if (checks.some(check => check.status !== 'completed')) return 'pending';
+    if (checks.every(check => check.conclusion === 'success' || check.conclusion === 'skipped' || check.conclusion === 'neutral')) return 'green';
+    return 'unknown';
+  }
+
+  async function getPriorityRadar() {
+    if (!token) return { repos: [] };
+    const repositories = [...allowedRepos];
+    const repoResults = await Promise.all(repositories.map(async repository => {
+      try {
+        const repoInfo = await getRepo(repository);
+        const defaultBranch = repoInfo.default_branch || 'main';
+        const [pullRequests, mainChecks, issues] = await Promise.all([
+          listOpenPullRequests(repository),
+          listBranchCheckRuns(defaultBranch, repository),
+          listIssues('open', repository)
+        ]);
+        const openPrs = await Promise.all(pullRequests.map(async pr => {
+          try {
+            const status = await getPullRequestStatus(pr.number, repository);
+            return {
+              number: pr.number,
+              title: pr.title,
+              htmlUrl: pr.html_url,
+              ciStatus: summarizeCi(status.checks),
+              mergeable: status.mergeable,
+              headSha: status.headSha
+            };
+          } catch {
+            return {
+              number: pr.number,
+              title: pr.title,
+              htmlUrl: pr.html_url,
+              ciStatus: 'unknown',
+              mergeable: null,
+              headSha: pr.head?.sha || null
+            };
+          }
+        }));
+        const failingMainChecks = mainChecks
+          .filter(check => check.conclusion === 'failure')
+          .map(check => ({ name: check.name, conclusion: check.conclusion, htmlUrl: check.html_url }));
+        const openIssues = issues
+          .filter(issue => !issue.pull_request && issue.user?.type !== 'Bot')
+          .slice(0, 5)
+          .map(issue => ({ number: issue.number, title: issue.title, htmlUrl: issue.html_url }));
+        return {
+          repository,
+          defaultBranch,
+          openPullRequests: openPrs,
+          failingMainChecks,
+          openIssues
+        };
+      } catch {
+        return null;
+      }
+    }));
+    return { repos: repoResults.filter(Boolean) };
+  }
+
   async function getFile(path, ref = 'main', requestedRepo) {
     const targetRepo = resolveRepo(requestedRepo);
     const data = await request(`/repos/${targetRepo}/contents/${path.replace(/^\/+/, '')}?ref=${encodeURIComponent(ref)}`);
