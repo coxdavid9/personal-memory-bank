@@ -126,14 +126,14 @@ function actionHtml(action){
  if(!action)return '';
  if(action.type==='calendar.create_event')return calendarActionHtml(action);
  if(action.type==='tool.approval'){
-  const preview=action.preview?.diff?\`<details style="margin-top:10px"><summary>View proposed change</summary><pre class="approval-preview">${esc(action.preview.diff)}</pre></details>\`:''; 
+  const preview=action.preview?.diff?`<details style="margin-top:10px"><summary>View proposed change</summary><pre class="approval-preview">${esc(action.preview.diff)}</pre></details>`:''; 
   const id=Number(action.approvalId);
   if(!approvalStateLoaded) return '';
   if(!pendingApprovalIds.has(id)){
    const expired=action.expiresAt && new Date(action.expiresAt).getTime()<=Date.now();
-   return \`<div class="action-card"><strong>${expired?'Expired':'Already decided'}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}</div>\`;
+   return `<div class="action-card"><strong>${expired?'Expired':'Already decided'}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}</div>`;
   }
-  return \`<div class="action-card"><strong>Approval required</strong><span class="muted">${esc(action.skill)} · expires ${esc(new Date(action.expiresAt).toLocaleTimeString())}</span>${preview}<div class="approval-actions"><button class="btn" onclick="decideApproval(${id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${id},'deny')">Deny</button></div></div>\`;
+  return `<div class="action-card"><strong>Approval required</strong><span class="muted">${esc(action.skill)} · expires ${esc(new Date(action.expiresAt).toLocaleTimeString())}</span>${preview}<div class="approval-actions"><button class="btn" onclick="decideApproval(${id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${id},'deny')">Deny</button></div></div>`;
  }
  return '';
 }
