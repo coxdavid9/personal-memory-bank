@@ -42,3 +42,30 @@ test('server imports capability definitions before initDb uses them', () => {
   assert.match(source, /require\(['"]\.\/agent-capabilities['"]\)/);
   assert.match(source, /CAPABILITY_DEFINITIONS/);
 });
+
+
+test('server imports capability definitions before initDb references them', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const importPos = source.indexOf("require('./agent-capabilities')");
+  const initPos = source.indexOf('async function initDb()');
+  assert.ok(importPos >= 0);
+  assert.ok(initPos >= 0);
+  assert.ok(importPos < initPos);
+});
+
+test('Jarvis v3 UI wiring is present and purple legacy accents are gone', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const manifest = fs.readFileSync(path.join(__dirname, '..', 'public', 'manifest.webmanifest'), 'utf8');
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(html, /JARVIS/);
+  assert.match(html, /\/reactor\.jpg/);
+  assert.match(html, /setWorking\(active\)/);
+  assert.match(html, /Working/);
+  assert.match(html, /prefers-reduced-motion/);
+  assert.doesNotMatch(html, /Personal Agent/);
+  for (const purple of ['#3b2a6e','#8b7cf6','#6d28d9','#4c1d95','#b9b3f0']) assert.doesNotMatch(html, new RegExp(purple, 'i'));
+  assert.match(manifest, /"name": "Jarvis"/);
+  assert.match(manifest, /"short_name": "Jarvis"/);
+  assert.match(server, /<title>Jarvis — Sign in<\/title>/);
+  assert.match(server, /<h1>JARVIS<\/h1>/);
+});
