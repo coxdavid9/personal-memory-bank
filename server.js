@@ -985,4 +985,3 @@ if (require.main === module) {
 }
 
 module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
- main
