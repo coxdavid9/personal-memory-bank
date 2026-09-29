@@ -211,7 +211,7 @@ async function sendNotification(message) {
     body: JSON.stringify({
       from,
       to: [process.env.REMINDER_EMAIL],
-      subject: 'Personal Agent — portfolio alert',
+      subject: 'Jarvis — portfolio alert',
       text: message,
       html: `<p>${message.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
     })
