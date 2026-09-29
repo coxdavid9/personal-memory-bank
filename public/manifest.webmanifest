@@ -1,11 +1,11 @@
 {
-  "name": "David's Personal Agent",
-  "short_name": "Personal Agent",
-  "description": "David's private personal AI agent.",
+  "name": "Jarvis",
+  "short_name": "Jarvis",
+  "description": "David's private Jarvis AI workspace.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#172033",
+  "background_color": "#070b12",
+  "theme_color": "#070b12",
   "icons": [
     {"src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml"}
   ]
