@@ -5,7 +5,7 @@ const { inferJob, buildAgentTools } = require('../agent-tools');
 test('router sends calendar requests to calendar skills only', () => {
   assert.equal(inferJob('Put a dentist appointment on my calendar'), 'calendar');
   const names = buildAgentTools({ job: 'calendar' }).map(tool => tool.name);
-  assert.deepEqual(names, ['save_memory','get_personal_context','create_calendar_event']);
+  assert.deepEqual(names, ['test_connections','save_memory','get_personal_context','create_calendar_event']);
 });
 
 test('router sends portfolio requests to portfolio skills', () => {

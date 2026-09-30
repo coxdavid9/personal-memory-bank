@@ -98,6 +98,7 @@ class CalDAVClient {
     this.calendarUrl = calendarUrl ? new URL(calendarUrl).toString() : '';
     this.fetch = fetchImpl;
     this.discoveryPromise = null;
+    this.discoveryError = null;
   }
 
   isConfigured() {
@@ -127,7 +128,7 @@ class CalDAVClient {
       headers: { Depth: String(depth), 'Content-Type': 'application/xml; charset=utf-8' },
       body
     });
-    if (!r.ok && r.status !== 207) throw new Error(`CalDAV PROPFIND failed (${r.status}).`);
+    if (!r.ok && r.status !== 207) throw Object.assign(new Error('CalDAV discovery failed.'), { status: r.status });
     return { xml: await r.text(), url: r.url || url };
   }
 
@@ -173,12 +174,14 @@ class CalDAVClient {
         const found = candidates.find(x => x.name === this.calendarName);
         if (!found) throw new Error(`CalDAV calendar "${this.calendarName}" was not found.`);
 
+        this.discoveryError = null;
         this.calendarUrl = urlFor(list.url || home, found.href);
         if (!this.calendarUrl.endsWith('/')) this.calendarUrl += '/';
         console.log(`CalDAV calendar discovered: ${found.name}`);
         return this.calendarUrl;
       } catch (err) {
-        console.error(`CalDAV unavailable: ${err.message}`);
+        this.discoveryError = err;
+        console.error('CalDAV discovery failed.');
         this.calendarUrl = '';
         this.discoveryPromise = null;
         return null;
@@ -189,17 +192,32 @@ class CalDAVClient {
   }
 
   async listUpcomingEvents({ days = 2 } = {}) {
-    const calendar = await this.discover(); if (!calendar) return [];
+    const calendar = await this.discover(); if (!calendar) throw this.discoveryError || new Error('CalDAV is not configured.');
     const safeDays = Math.min(14, Math.max(1, Number(days) || 2)); const start = new Date(); const end = new Date(start.getTime() + safeDays * 24 * 60 * 60 * 1000);
     const toCalDavUtc = value => { const d = new Date(value); const p=n=>String(n).padStart(2,'0'); return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z'; };
     const body = '<?xml version="1.0" encoding="UTF-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="'+toCalDavUtc(start)+'" end="'+toCalDavUtc(end)+'"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>';
-    const r=await this.request(calendar,{method:'REPORT',headers:{Depth:'1','Content-Type':'application/xml; charset=utf-8'},body}); if(!r.ok&&r.status!==207) throw new Error('CalDAV REPORT failed ('+r.status+').');
+    const r=await this.request(calendar,{method:'REPORT',headers:{Depth:'1','Content-Type':'application/xml; charset=utf-8'},body}); if(!r.ok&&r.status!==207) throw Object.assign(new Error('CalDAV read failed.'), { status:r.status });
     const xml=await r.text();
     const parseDateValue=(raw,tzid=null)=>{const value=String(raw||'').trim();if(!value)return null;if(/^\d{8}$/.test(value))return value.slice(0,4)+'-'+value.slice(4,6)+'-'+value.slice(6,8);const m=value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);if(!m)return value;const iso=m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5]+':'+m[6];return m[7]?iso+'Z':iso+(tzid?'['+tzid+']':'');};
     const unfold=text=>String(text||'').replace(/\r?\n[ \t]/g,''); const events=[];
     for(const response of responses(xml)){const calendarData=tag(response,'calendar-data');if(!calendarData)continue;const data=unfold(calendarData);const matches=data.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/gi)||[];
       for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID');if(!dtstart)continue;events.push({uid:uid?.value||null,title:summary?.value||'(Untitled event)',start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart)});}
     } return events.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+  }
+
+  async testConnection() {
+    if (!this.isConfigured()) return { connected:false, status:'not_configured' };
+    try {
+      await this.listUpcomingEvents({days:1});
+      return { connected:true, status:'connected', calendarName:this.calendarName, scope:'Reads and writes the configured calendar only.' };
+    } catch (err) {
+      const status = [401,403].includes(err.status) ? 'authentication_failed' :
+        /was not found/.test(err.message || '') ? 'calendar_missing' : 'connection_failed';
+      return { connected:false, status, calendarName:this.calendarName,
+        message:status === 'authentication_failed' ? 'Check the Apple account email and Apple app-specific password in Render.' :
+          status === 'calendar_missing' ? 'Create the configured calendar in iCloud, or set CALDAV_CALENDAR_NAME to an existing calendar.' :
+            'iCloud could not be reached or read. Check the CalDAV URL and try again.' };
+    }
   }
 
   async createCalDAVEvent(event) {
