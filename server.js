@@ -7,6 +7,7 @@ const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { CAPABILITY_DEFINITIONS } = require('./agent-capabilities');
 const { buildCalDAVClientFromEnv } = require('./caldav');
+const { buildEmailClientsFromEnv, isActionableEmail } = require('./email');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
@@ -30,6 +31,7 @@ const clearCfoApiUrl = process.env.CLEARCFO_API_URL || '';
 const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
 const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
+const emailClients = buildEmailClientsFromEnv();
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 const github = buildGitHubClientFromEnv();
 const renderOps = buildRenderClientFromEnv();
@@ -315,24 +317,27 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
 
 async function getAgentContext(db = pool, options = {}) {
   const includeGithub = Boolean(options.includeGithub);
+  const includeRadar = options.includeRadar === undefined ? includeGithub : Boolean(options.includeRadar);
   const githubClient = options.githubClient === undefined ? github : options.githubClient;
   const emptyGithub = { repos: [], items: [] };
   const githubPromise = includeGithub && githubClient?.getPriorityRadar
     ? githubClient.getPriorityRadar().then(radar => ({ ...radar, items: buildGitHubPriorityItems(radar) })).catch(() => emptyGithub)
     : Promise.resolve(emptyGithub);
+  const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.listUnread(10).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listUnread(10).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail])=>({yahoo:yahoo.filter(isActionableEmail).slice(0,5),gmail:gmail.filter(isActionableEmail).slice(0,5)})) : Promise.resolve({yahoo:[],gmail:[]});
+  const calendarPromise = includeRadar && caldav ? caldav.listUpcomingEvents({days:2}).catch(()=>[]) : Promise.resolve([]);
 
   if (!db) {
-    const githubRadar = await githubPromise;
+    const [githubRadar,radarEmail,radarCalendar] = await Promise.all([githubPromise,emailPromise,calendarPromise]);
     return {
       memories: [],
       projects: [],
       capabilities: [],
       portfolioState: { manualCount: 0, plaidCount: 0 },
-      priorityContext: { memories: [], jobs: [], github: githubRadar }
+      priorityContext: { memories: [], jobs: [], github: githubRadar, email: radarEmail, calendar: radarCalendar }
     };
   }
 
-  const [memories, projects, capabilities, jobs, portfolio, githubRadar] = await Promise.all([
+  const [memories, projects, capabilities, jobs, portfolio, githubRadar, radarEmail, radarCalendar] = await Promise.all([
     db.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
     db.query(`SELECT id, name, description, status FROM agent_projects WHERE status='active' ORDER BY name`),
     db.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
@@ -344,7 +349,9 @@ async function getAgentContext(db = pool, options = {}) {
                 COUNT(*) FILTER (WHERE source='manual')::int AS "manualCount",
                 COUNT(*) FILTER (WHERE source='plaid')::int AS "plaidCount"
               FROM holdings`),
-    githubPromise
+    githubPromise,
+    emailPromise,
+    calendarPromise
   ]);
   const portfolioState = buildPortfolioContext({
     manualCount: portfolio.rows[0]?.manualCount,
@@ -359,7 +366,7 @@ async function getAgentContext(db = pool, options = {}) {
     capabilities: capabilities.rows,
     portfolioState,
     portfolioGuidance: portfolioState.guidance,
-    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar }
+    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar, email: radarEmail, calendar: radarCalendar }
   };
 }
 
@@ -390,7 +397,7 @@ Architecture rules:
   - For corrections, re-read the source user message(s) supporting each surviving record. Quote the relevant wording in the confirmation. If a surviving record is not supported by a source quote, drop it and ask David to restate/confirm it rather than defending the record from memory.
   - Treat job records as structured state: applied, excluded/rejected, and considering/saved. Applied and excluded/rejected roles must be suppressed from future job lead lists.
   - Priority hygiene is strict: when David asks what he should work on, use only context.priorityContext as the candidate pool. List only actionable items, each with a concrete next-step verb (fix, verify, send, review, build…). Never include "ignore X", "don't do Y", "X is stale", or equivalent dismissal work. Dismissed, deleted, ignored, and resolved items are omitted silently. If everything is handled, say so in one line.
-  - GitHub work radar is read-only and is populated only for work-priority questions. Treat context.priorityContext.github.items as candidates alongside memories and jobs. For a green, mergeable PR use the concrete form "Review/merge PR #N — CI green"; for a failing PR use "PR #N failing CI"; for a failing default branch check use "main is failing on X". Open issues may be surfaced as "Review issue #N — title". Never auto-merge, auto-push, or auto-fix from the radar; David decides when to merge. If the GitHub radar is empty, omit it silently.
+  - GitHub work radar is read-only and is populated only for work-priority questions. Treat context.priorityContext.github.items as candidates alongside memories and jobs.\n  - Work-radar email/calendar candidates live in context.priorityContext.email and context.priorityContext.calendar. Use concrete verbs such as \"Reply to X about Y\" and \"You have X at 2pm\". Never include newsletters, promotions, or automated messages as priority candidates. For a green, mergeable PR use the concrete form "Review/merge PR #N — CI green"; for a failing PR use "PR #N failing CI"; for a failing default branch check use "main is failing on X". Open issues may be surfaced as "Review issue #N — title". Never auto-merge, auto-push, or auto-fix from the radar; David decides when to merge. If the GitHub radar is empty, omit it silently.
   - GitHub priority radar data is empty when GITHUB_TOKEN is unset; do not mention the missing token or produce integration-error noise.
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
@@ -532,6 +539,7 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
     getJobApplicationHistory,
     saveJobApplication,
     caldav,
+    emailClients,
     github,
     renderOps,
     delegateToTeam,

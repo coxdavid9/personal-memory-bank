@@ -35,3 +35,8 @@ test('builds an all-day VEVENT with an exclusive DTEND date', () => {
   assert.match(ics, /DTEND;VALUE=DATE:20260929/);
   assert.match(ics, /UID:all-day@personal-agent/);
 });
+
+test('lists upcoming VEVENTs from a CalDAV REPORT response', async () => {
+ const {CalDAVClient}=require('../caldav'); const client=new CalDAVClient({baseUrl:'https://cal.example.test/',username:'u',password:'p',calendarUrl:'https://cal.example.test/cal/',fetchImpl:async()=>new Response('<multistatus xmlns="DAV:"><response><propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav">BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:one\nDTSTART:20260930T140000Z\nDTEND:20260930T150000Z\nSUMMARY:Interview\nLOCATION:Jonesboro\nEND:VEVENT\nEND:VCALENDAR</calendar-data></prop></propstat></response></multistatus>',{status:207})});
+ const events=await client.listUpcomingEvents({days:2}); assert.equal(events.length,1); assert.equal(events[0].title,'Interview'); assert.equal(events[0].start,'2026-09-30T14:00:00Z'); assert.equal(events[0].location,'Jonesboro');
+});
