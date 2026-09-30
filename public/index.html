@@ -119,6 +119,7 @@ let chatSyncBusy=false;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 let approvalStateLoaded=false; let pendingApprovalIds=new Set(); let decidedApprovals=new Map();
+let approvalLoadVersion=0; let approvalLastRefresh=0; let approvalLoadError='';
 function renderContent(content){let rendered=esc(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');rendered=rendered.replace(/\(([^()\n]{1,160})\)\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/\[([^\]]{1,160})\]\((https?:\/\/[^\s)]+)\)/g,(match,label,url)=>'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');rendered=rendered.replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g,(match,prefix,url)=>{const clean=url.replace(/[.,]$/,'');return prefix+'<a href="'+clean+'" target="_blank" rel="noopener noreferrer">'+clean+'</a>'});return rendered.replace(/\n/g,'<br>')}function renderMessages(forceBottom=false){const el=document.getElementById('messages');const distanceFromBottom=document.documentElement.scrollHeight-window.scrollY-window.innerHeight;const stickToBottom=forceBottom||distanceFromBottom<80;el.innerHTML=messages.length?messages.map((m,i)=>{const rendered=renderContent(m.content);const imageHtml=m.image?'<div style="margin-bottom:8px"><img src="'+m.image+'" alt="Attached image" style="display:block;max-width:min(520px,100%);max-height:420px;border-radius:10px"></div>':'';const bubble='<div class="bubble '+(m.role==='user'?'user':'assistant')+'">'+imageHtml+rendered+'<div style="margin-top:7px"><button class="btn secondary" style="font-size:11px;padding:5px 8px" onclick="copyMessage('+i+')">Copy</button></div></div>';const actions=(m.actions||[]).map(actionHtml).join('');return bubble+actions}).join(''):'<div class="muted" style="margin-top:18px">Start with something simple. Try “What should I be working on right now?”</div>';if(stickToBottom)window.scrollTo({top:document.documentElement.scrollHeight,behavior:forceBottom?'auto':'smooth'})}
 async function attachImageFile(file){
   if(!file)return;
@@ -183,15 +184,17 @@ function actionHtml(action){
  if(action.type==='tool.approval'){
   const preview=action.preview?.diff?`<details style="margin-top:10px"><summary>View proposed change</summary><pre class="approval-preview">${esc(action.preview.diff)}</pre></details>`:''; 
   const id=Number(action.approvalId);
-  if(!approvalStateLoaded) return '';
-  if(!pendingApprovalIds.has(id)){
+  if(!approvalStateLoaded) return `<div class="action-card"><strong>Checking approval status…</strong><span class="muted">${esc(action.skill)} · approval #${id}</span></div>`;
+  const expired=action.expiresAt && new Date(action.expiresAt).getTime()<=Date.now();
+  if(!pendingApprovalIds.has(id) || expired || approvalLoadError){
    const decided=decidedApprovals.get(id);
-   let label='Already decided';
+   let label=approvalLoadError?'Unable to verify approval status':'Approval status unavailable';
    if(decided?.status==='approved' || decided?.decision==='approve') label='Approved';
    else if(decided?.status==='denied' || decided?.decision==='deny') label='Denied';
    else if(decided?.status==='expired' || decided?.decision==='timeout') label='Expired — no decision made';
-   else if(action.expiresAt && new Date(action.expiresAt).getTime()<=Date.now()) label='Expired — no decision made';
-   return `<div class="action-card"><strong>${label}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}</div>`;
+   else if(expired) label='Expired — no decision made';
+   const refresh=(!decided&&!expired)?'<br><button class="btn secondary" onclick="loadApprovals()">Refresh approval status</button>':'';
+   return `<div class="action-card"><strong>${label}</strong><span class="muted">${esc(action.skill)} · approval #${id}</span>${preview}${refresh}</div>`;
   }
   return `<div class="action-card"><strong>Approval required</strong><span class="muted">${esc(action.skill)} · expires ${esc(new Date(action.expiresAt).toLocaleTimeString())}</span>${preview}<div class="approval-actions"><button class="btn" onclick="decideApproval(${id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${id},'deny')">Deny</button></div></div>`;
  }
@@ -199,8 +202,13 @@ function actionHtml(action){
 }
 async function decideApproval(id,decision){try{const data=await api(`/api/approvals/${id}/decision`,{method:'POST',body:JSON.stringify({decision})});messages.push({role:'assistant',content:decision==='approve'?'Approved. The agent executed the action.':'Denied. The agent did not execute the action.',actions:data.actions||[]});renderMessages();loadApprovals()}catch(e){alert(e.message)}}
 async function loadApprovals(){
+ const version=++approvalLoadVersion;
  try{
-  const data=await api('/api/approvals');
+  const data=await api('/api/approvals',{cache:'no-store'});
+  if(version!==approvalLoadVersion)return;
+  if(!Array.isArray(data.approvals)||!Array.isArray(data.decided))throw new Error('Unable to verify approval status. Refresh the page or sign in again.');
+  approvalLoadError='';
+  approvalLastRefresh=Date.now();
   const approvals=data.approvals||[];
   const decided=data.decided||[];
   pendingApprovalIds=new Set(approvals.map(a=>Number(a.id)));
@@ -209,7 +217,7 @@ async function loadApprovals(){
   const el=document.getElementById('approvals');
   el.innerHTML=approvals.length?approvals.map(a=>`<div class="memory"><strong>${esc(a.skill)}</strong><br><span class="muted">Expires ${esc(new Date(a.expiresAt).toLocaleString())}</span><div class="approval-actions"><button class="btn" onclick="decideApproval(${a.id},'approve')">Approve</button><button class="btn secondary" onclick="decideApproval(${a.id},'deny')">Deny</button></div></div>`).join(''):'<div class="muted">Nothing waiting for approval.</div>';
   renderMessages();
- }catch(e){approvalStateLoaded=true;pendingApprovalIds=new Set();document.getElementById('approvals').innerHTML='<div class="muted">'+esc(e.message)+'</div>';renderMessages()}
+ }catch(e){if(version!==approvalLoadVersion)return;approvalStateLoaded=true;approvalLoadError=e.message;approvalLastRefresh=Date.now();document.getElementById('approvals').innerHTML='<div class="muted">'+esc(e.message)+'</div>';renderMessages()}
 }
 function icsEscape(value){return String(value||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n')}
 function icsDate(iso){const d=new Date(iso);const pad=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`}
@@ -278,6 +286,8 @@ async function syncChat(){
     renderMessages();
     const hasApprovalAction=nextMessages.some(m=>(m.actions||[]).some(a=>a?.type==='tool.approval'));
     if(hasApprovalAction){await loadApprovals().catch(()=>{});renderMessages();}
+   }else if(messages.some(m=>(m.actions||[]).some(a=>a?.type==='tool.approval')) && Date.now()-approvalLastRefresh>=15000){
+    await loadApprovals().catch(()=>{});renderMessages();
    }
  }catch(e){}finally{chatSyncBusy=false;}
 }
