@@ -317,7 +317,7 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
 
 async function getAgentContext(db = pool, options = {}) {
   const includeGithub = Boolean(options.includeGithub);
-  const includeRadar = Boolean(options.includeRadar);
+  const includeRadar = options.includeRadar === undefined ? includeGithub : Boolean(options.includeRadar);
   const githubClient = options.githubClient === undefined ? github : options.githubClient;
   const emptyGithub = { repos: [], items: [] };
   const githubPromise = includeGithub && githubClient?.getPriorityRadar
@@ -561,8 +561,7 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
 async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
   if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
-  const workPriority = isWorkPriorityQuestion(message);
-  const context = await getAgentContext(pool, { includeGithub: workPriority, includeRadar: workPriority });
+  const context = await getAgentContext(pool, { includeGithub: isWorkPriorityQuestion(message) });
   const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(id => Number.isInteger(id)))];
   if (ids.length > MAX_FILES_PER_MESSAGE) throw new Error('You can attach up to 5 Excel/CSV files per message.');
   const excelFiles = [];

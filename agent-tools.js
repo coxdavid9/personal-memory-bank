@@ -250,11 +250,13 @@ const excelDeleteTool = {
 
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
-  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event'],
+  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
+  calendar_read: ['save_memory','get_personal_context','get_calendar_events'],
+  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['save_memory','get_personal_context','create_calendar_event','get_calendar_events','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
+  calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
@@ -265,7 +267,9 @@ function inferJob(message = '', hasFiles = false) {
   if (hasFiles) return 'excel_analysis';
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
+  if (/email.*calendar|calendar.*email/.test(text)) return 'communications';
   if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
+  if (/upcoming events|calendar events|what(?:'s| is) on my calendar|what do i have (?:scheduled|on my calendar)/.test(text)) return 'calendar_read';
   if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
   if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
