@@ -113,7 +113,6 @@ test('workflow persistence and concurrency in real PostgreSQL',{skip:!process.en
       await reset();
       const policy=require('../policy');
       const original=policy.DEFAULT_POLICIES.deliver_workflow_message;
-      // Use whitelist load bypass? Default policy is frozen: test real ask path through module isolation instead.
       assert.equal(original,'monitor');
       const a=await saveApplicationWithWorkflow(pool,args,'a');
       await recordInterview(pool,interview(a.application.id),'i1');
@@ -142,6 +141,31 @@ test('workflow persistence and concurrency in real PostgreSQL',{skip:!process.en
       await processDueWorkflows(pool);
       assert.equal((await pool.query('SELECT status FROM agent_workflow_steps WHERE id=$1',[step.id])).rows[0].status,'expired');
       assert.equal(Number(await scalar('SELECT COUNT(*) AS n FROM agent_messages')),0);
+      await recordInterview(pool,interview(a.application.id,{start:new Date(Date.now()+3*86400000).toISOString()}),'i2');
+      const next=(await pool.query("SELECT id FROM agent_workflow_steps WHERE kind='interview_prep' AND status='pending'")).rows[0];
+      const denied=(await pool.query(`INSERT INTO tool_approvals(run_id,skill,args,expires_at)
+        VALUES('workflow','deliver_workflow_message',$1,NOW()+INTERVAL '5 minutes') RETURNING id`,[JSON.stringify({task_id:Number(next.id)})])).rows[0];
+      await pool.query("UPDATE agent_workflow_steps SET status='waiting_approval',approval_id=$1 WHERE id=$2",[denied.id,next.id]);
+      await decideApproval(pool,denied.id,'deny');
+      await processDueWorkflows(pool);
+      assert.equal((await pool.query('SELECT status FROM agent_workflow_steps WHERE id=$1',[next.id])).rows[0].status,'denied');
+    });
+    await t.test('failed delivery rolls back chat, retries durably, and recovers in a fresh worker',async()=>{
+      await reset();
+      const a=await saveApplicationWithWorkflow(pool,args,'a');
+      await recordInterview(pool,interview(a.application.id),'i1');
+      await pool.query(`CREATE FUNCTION fail_chat() RETURNS trigger AS $ BEGIN RAISE EXCEPTION 'test write failure'; END $ LANGUAGE plpgsql`);
+      await pool.query(`CREATE TRIGGER fail_chat BEFORE INSERT ON agent_messages FOR EACH ROW EXECUTE FUNCTION fail_chat()`);
+      await processDueWorkflows(pool);
+      assert.equal(Number(await scalar('SELECT COUNT(*) AS n FROM agent_messages')),0);
+      assert.equal(Number(await scalar("SELECT COUNT(*) AS n FROM agent_workflow_steps WHERE attempts=1")),1);
+      await pool.query('DROP TRIGGER fail_chat ON agent_messages');
+      await pool.query("UPDATE agent_workflow_steps SET next_attempt_at=NOW()-INTERVAL '1 second'");
+      const recovered=new Pool({connectionString:process.env.TEST_WORKFLOW_DATABASE_URL,options:'-c search_path='+schema});
+      try { await processDueWorkflows(recovered); } finally { await recovered.end(); }
+      assert.equal(Number(await scalar('SELECT COUNT(*) AS n FROM agent_messages')),1);
+      await processDueWorkflows(pool);
+      assert.equal(Number(await scalar('SELECT COUNT(*) AS n FROM agent_messages')),1);
     });
   } finally {
     await pool.end();await admin.query('DROP SCHEMA '+schema+' CASCADE');await admin.end();

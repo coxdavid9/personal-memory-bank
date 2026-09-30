@@ -37,6 +37,7 @@ test('timestamps must have an offset; reminders do not claim inbox knowledge',()
 });
 test('interview routing, capability toggles, and policies preserve approvals',()=>{
   assert.equal(inferJob('I have an interview with Nestle Thursday at 2'),'job_search');
+  assert.equal(inferJob('Check Yahoo for a response to my interview'),'communications');
   const names=buildAgentTools({job:'job_search'}).map(t=>t.name);
   assert.ok(names.includes('record_interview'));assert.ok(names.includes('get_workflows'));
   assert.ok(!buildAgentTools({job:'job_search',enabledCapabilities:['memory']}).some(t=>t.name==='record_interview'));

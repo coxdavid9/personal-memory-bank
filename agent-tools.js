@@ -269,9 +269,9 @@ const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team','get_workflows'],
   email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
   calendar_read: ['save_memory','get_personal_context','get_calendar_events'],
-  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event'],
+  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event','get_job_application_history','record_interview','get_workflows'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
-  job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows'],
+  job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows','create_calendar_event'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
@@ -283,6 +283,7 @@ function inferJob(message = '', hasFiles = false) {
   const text = String(message).toLowerCase();
   if (hasFiles) return 'excel_analysis';
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
+  if (/email|mailbox|yahoo|gmail/.test(text) && /interview|follow.?up|application/.test(text)) return 'communications';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application|interview|follow.?up|workflow/.test(text)) return 'job_search';
   if (/email.*calendar|calendar.*email/.test(text)) return 'communications';
   if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
