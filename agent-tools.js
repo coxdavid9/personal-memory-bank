@@ -69,6 +69,13 @@ const recordHoldingTool = {
   }
 };
 
+const calendarEventsTool = { type:'function', name:'get_calendar_events', description:'Read upcoming events from David\'s configured iCloud/iPhone calendar. Read-only.', strict:true, parameters:{type:'object',properties:{days:{type:'integer',description:'Days ahead, default 2, maximum 14.'}},required:['days'],additionalProperties:false} };
+const yahooUnreadTool={type:'function',name:'email_list_unread',description:'List unread messages in David\'s personal Yahoo mailbox. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{limit:{type:'integer'}},required:['limit'],additionalProperties:false}};
+const yahooSearchTool={type:'function',name:'email_search',description:'Search David\'s personal Yahoo mailbox by sender, subject, or keyword. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{sender:{type:['string','null']},subject:{type:['string','null']},keyword:{type:['string','null']},limit:{type:'integer'}},required:['sender','subject','keyword','limit'],additionalProperties:false}};
+const yahooReadTool={type:'function',name:'email_read',description:'Read one message body from David\'s personal Yahoo mailbox. Read-only; no attachments are downloaded.',strict:true,parameters:{type:'object',properties:{uid:{type:'integer'}},required:['uid'],additionalProperties:false}};
+const gmailUnreadTool={type:'function',name:'gmail_list_unread',description:'List unread messages in David\'s work Gmail mailbox. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{limit:{type:'integer'}},required:['limit'],additionalProperties:false}};
+const gmailSearchTool={type:'function',name:'gmail_search',description:'Search David\'s work Gmail mailbox by sender, subject, or keyword. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{sender:{type:['string','null']},subject:{type:['string','null']},keyword:{type:['string','null']},limit:{type:'integer'}},required:['sender','subject','keyword','limit'],additionalProperties:false}};
+const gmailReadTool={type:'function',name:'gmail_read',description:'Read one message body from David\'s work Gmail mailbox. Read-only; no attachments are downloaded.',strict:true,parameters:{type:'object',properties:{uid:{type:'integer'}},required:['uid'],additionalProperties:false}};
 const calendarEventTool = {
   type: 'function',
   name: 'create_calendar_event',
@@ -243,10 +250,11 @@ const excelDeleteTool = {
 
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
+  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['save_memory','get_personal_context','create_calendar_event'],
+  calendar: ['save_memory','get_personal_context','create_calendar_event','get_calendar_events'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
@@ -257,6 +265,7 @@ function inferJob(message = '', hasFiles = false) {
   if (hasFiles) return 'excel_analysis';
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
+  if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
   if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
   if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
@@ -271,11 +280,12 @@ const CAPABILITY_TOOL_MAP = Object.freeze({
   portfolio: new Set(['get_portfolio_summary','record_holding','delete_holding']),
   'agent-team': new Set(['delegate_to_team']),
   excel: new Set(['excel_summary','excel_query','excel_build','excel_delete']),
+  email: new Set(['email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read']),
   clearcfo: new Set(),
 });
 
 function buildAgentTools({ job = 'general', enabledCapabilities = null } = {}) {
-  const all = [memoryTool, contextTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
+  const all = [memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const enabled = enabledCapabilities == null
     ? null
@@ -406,6 +416,13 @@ async function executeAgentTool(name, args, deps) {
     });
   }
 
+  if (name === 'get_calendar_events') return run('get_calendar_events', async () => { if (!deps.caldav?.isConfigured()) return {ok:true,connected:false,message:'calendar not connected',events:[]}; const days=Math.min(14,Math.max(1,Number(args.days)||2)); return {ok:true,connected:true,days,events:await deps.caldav.listUpcomingEvents({days})}; });
+  if (name === 'email_list_unread') return run('email_list_unread', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.listUnread(args.limit)}; });
+  if (name === 'email_search') return run('email_search', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.search(args)}; });
+  if (name === 'email_read') return run('email_read', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'personal Yahoo',message:await deps.emailClients.yahoo.read(args.uid)}; });
+  if (name === 'gmail_list_unread') return run('gmail_list_unread', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.listUnread(args.limit)}; });
+  if (name === 'gmail_search') return run('gmail_search', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.search(args)}; });
+  if (name === 'gmail_read') return run('gmail_read', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'work Gmail',message:await deps.emailClients.gmail.read(args.uid)}; });
   if (name === 'create_calendar_event') {
     return run('create_calendar_event', async () => {
     const start = new Date(args.start);
