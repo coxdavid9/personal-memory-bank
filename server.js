@@ -14,6 +14,7 @@ const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = re
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
 const { initJobSearchDb, getJobApplicationHistory, saveJobApplication, isDismissedJobText } = require('./job-search');
+const { initWorkflowDb, saveApplicationWithWorkflow, recordInterview, getWorkflows, deliverWorkflowMessage, processDueWorkflows } = require('./workflow-engine');
 const { initPolicyDb, getApproval, decideApproval, auditToolCall, executeSkill } = require('./policy');
 const { verifyGitHubSignature, failedCheckRunEvent } = require('./github-webhook');
 const { UPLOAD_DIR, MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_TOTAL_BYTES, ensureUploadDir, isSpreadsheetName, safeFileName, profileFile, initExcelDb, purgeExpiredExcelFiles, purgeMissingExcelFiles, getExcelFile, createExcelFile, queryExcelFile, buildWorkbook, deleteExcelFile } = require('./excel');
@@ -162,6 +163,7 @@ async function initDb() {
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
   await initExcelDb(pool);
+  await initWorkflowDb(pool);
   await purgeMissingExcelFiles(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS github_webhook_events (
@@ -400,6 +402,8 @@ Architecture rules:
   - GitHub work radar is read-only and is populated only for work-priority questions. Treat context.priorityContext.github.items as candidates alongside memories and jobs.\n  - Work-radar email/calendar candidates live in context.priorityContext.email and context.priorityContext.calendar. Use concrete verbs such as \"Reply to X about Y\" and \"You have X at 2pm\". Never include newsletters, promotions, or automated messages as priority candidates. For a green, mergeable PR use the concrete form "Review/merge PR #N — CI green"; for a failing PR use "PR #N failing CI"; for a failing default branch check use "main is failing on X". Open issues may be surfaced as "Review issue #N — title". Never auto-merge, auto-push, or auto-fix from the radar; David decides when to merge. If the GitHub radar is empty, omit it silently.
   - GitHub priority radar data is empty when GITHUB_TOKEN is unset; do not mention the missing token or produce integration-error noise.
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
+- Interview/workflow state is durable. For confirmed interviews, look up the tracked application id, then call record_interview; create a job record first if needed. Ask for a missing date/time rather than guessing. Use explicit timezone offsets. Record scheduled, completed, cancelled, or response_received as David reports them. A promised response date belongs in expected_response_at. A scheduled interview creates Jarvis chat steps only; use create_calendar_event separately when requested.
+- Read get_workflows before reporting current follow-ups. Live workflow state outranks old chat reminders and retired memory notes. A due follow-up does not prove no reply arrived: ask or verify with an explicitly requested email read. Background V1 creates checklists and draft messages, not automatic company research, email sends, applications, or calendar writes.
 - Calendar is permissioned device data and should only be used when the user grants access.\n- Portfolio is reporting-only: it can record manual holdings and later sync brokerage holdings, but it must not give buy/sell recommendations. David can remove manual holdings through the approval flow; never delete Plaid-synced holdings and never give buy/sell recommendations.
 - Live portfolio state:
 ${JSON.stringify(context.portfolioState, null, 2)}
@@ -537,7 +541,10 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
     deleteManualHoldings,
     getPortfolioSummary,
     getJobApplicationHistory,
-    saveJobApplication,
+    saveJobApplication: saveApplicationWithWorkflow,
+    recordInterview,
+    getWorkflows,
+    deliverWorkflowMessage,
     caldav,
     emailClients,
     github,
@@ -768,6 +775,13 @@ app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
 });
 
+app.get('/api/workflows', async (req,res) => {
+  try {
+    const result = await executeSkill('get_workflows',{}, {pool,execute:()=>getWorkflows(pool)});
+    res.json(result);
+  } catch (err) { res.status(500).json({error:'Unable to load workflows.'}); }
+});
+
 app.get('/api/approvals', async (req, res) => {
   if (!pool) return res.json({ approvals: [], decided: [] });
   try {
@@ -985,6 +999,18 @@ app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html'))
 
 if (require.main === module) {
   initDb().then(async () => {
+    if (pool) {
+      let workflowTickRunning = false;
+      const tick = async () => {
+        if (workflowTickRunning) return;
+        workflowTickRunning = true;
+        try { await processDueWorkflows(pool); }
+        catch (err) { console.error('Workflow tick failed:', err.message); }
+        finally { workflowTickRunning = false; }
+      };
+      await tick();
+      setInterval(tick, 30 * 1000).unref();
+    }
     if (pool) setInterval(() => purgeExpiredExcelFiles(pool).catch(err => console.error('Excel purge failed:', err)), 24 * 60 * 60 * 1000);
     if (caldav) await caldav.discover();
     app.listen(port, '0.0.0.0', () => console.log(`Personal Agent running on ${port}; storage:${hasDatabase}; AI:${hasOpenAI}; ClearCFO:${Boolean(clearCfoApiUrl)}; CalDAV:${Boolean(caldav)}`));

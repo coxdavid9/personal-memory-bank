@@ -8,6 +8,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: workflows_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,6 +35,7 @@ jobs:
 
       - name: Syntax checks
         run: |
+          node --check workflow-engine.js
           node --check server.js
           node --check agent-tools.js
           node --check agent-team.js
@@ -35,4 +49,6 @@ jobs:
         run: node -e "const fs=require('fs'); const html=fs.readFileSync('public/index.html','utf8'); const js=html.match(/<script>([\\s\\S]*?)<\\/script>/); if(!js) throw new Error('Browser script not found'); new Function(js[1]);"
 
       - name: Test suite
+        env:
+          TEST_WORKFLOW_DATABASE_URL: postgres://postgres:postgres@localhost:5432/workflows_test
         run: npm test
