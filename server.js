@@ -600,7 +600,7 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
     { role: 'user', content: userContent },
   ];
 
-  const job = inferJob(message, excelFiles.length > 0);
+  const job = inferJob(message, excelFiles.length > 0, recent);
   const tools = buildAgentTools({ job, enabledCapabilities: context.capabilities });
   let responseInput = input;
 

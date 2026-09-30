@@ -284,9 +284,23 @@ const JOB_SKILLS = Object.freeze({
   product: ['save_memory','get_personal_context','delegate_to_team']
 });
 
-function inferJob(message = '', hasFiles = false) {
+function inferJob(message = '', hasFiles = false, recent = []) {
   const text = String(message).toLowerCase();
   if (hasFiles) return 'excel_analysis';
+  // Keep calendar clarification answers in the active task, before keyword routing.
+  // Only the immediately preceding exchange counts; explicit new requests win.
+  const history = Array.isArray(recent) ? recent : [];
+  const last = history.at(-1);
+  const previous = history.at(-2);
+  const briefReply = text.trim().length <= 160 && text.trim().split(/\s+/).length <= 20;
+  const newRequest = /^(?:please\s+)?(?:show|check|find|search|create|add|schedule|read|review|analy[sz]e|fix|deploy|merge|delete|cancel|stop|forget|instead|switch|run)\b|\btest (?:my|the|a|our)\b/.test(text.trim());
+  if (briefReply && !newRequest && last?.role === 'assistant' && previous?.role === 'user' &&
+      /\?/.test(String(last.content)) &&
+      /calendar|meeting|appointment|event/.test(String(last.content).toLowerCase()) &&
+      /title|name|how long|duration|what time|which date|where|location/.test(String(last.content).toLowerCase())) {
+    const previousJob = inferJob(previous.content, false);
+    if (previousJob === 'calendar') return 'calendar';
+  }
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
   if (/email|mailbox|yahoo|gmail/.test(text) && /interview|follow.?up|application/.test(text)) return 'communications';
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application|interview|follow.?up|workflow/.test(text)) return 'job_search';
