@@ -248,13 +248,30 @@ const excelDeleteTool = {
   }
 };
 
+const workflowStatusTool = {
+  type:'function',name:'get_workflows',description:'Read live application/interview workflow state and scheduled or completed steps. Use before discussing current follow-ups or interview reminders.',
+  strict:true,parameters:{type:'object',properties:{},required:[],additionalProperties:false}
+};
+const interviewTool = {
+  type:'function',name:'record_interview',
+  description:'Track a confirmed interview or update its outcome for a tracked application. Scheduling creates prep and reminders in Jarvis chat. Completing starts a follow-up timer. Cancellation or response_received stops old steps. Does not create a calendar event. Look up the application id first; never guess dates or ids.',
+  strict:true,parameters:{type:'object',properties:{
+    application_id:{type:'integer'},
+    status:{type:'string',enum:['scheduled','completed','cancelled','response_received']},
+    start:{type:['string','null'],description:'ISO timestamp with explicit offset. Required for a new scheduled interview; null preserves its previous start.'},
+    format:{type:['string','null'],description:'Phone, video, or in person; null preserves previous value.'},
+    notes:{type:['string','null']},
+    expected_response_at:{type:['string','null'],description:'Explicit ISO response deadline, or null for 7 days after completion is recorded.'}
+  },required:['application_id','status','start','format','notes','expected_response_at'],additionalProperties:false}
+};
+
 const JOB_SKILLS = Object.freeze({
-  general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
+  general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team','get_workflows'],
   email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
   calendar_read: ['save_memory','get_personal_context','get_calendar_events'],
-  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event'],
+  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event','get_job_application_history','record_interview','get_workflows'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
-  job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
+  job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows','create_calendar_event'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
   calendar: ['save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
@@ -266,7 +283,8 @@ function inferJob(message = '', hasFiles = false) {
   const text = String(message).toLowerCase();
   if (hasFiles) return 'excel_analysis';
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
-  if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application/.test(text)) return 'job_search';
+  if (/email|mailbox|yahoo|gmail/.test(text) && /interview|follow.?up|application/.test(text)) return 'communications';
+  if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application|interview|follow.?up|workflow/.test(text)) return 'job_search';
   if (/email.*calendar|calendar.*email/.test(text)) return 'communications';
   if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
   if (/upcoming events|calendar events|what(?:'s| is) on my calendar|what do i have (?:scheduled|on my calendar)/.test(text)) return 'calendar_read';
@@ -279,7 +297,7 @@ function inferJob(message = '', hasFiles = false) {
 
 const CAPABILITY_TOOL_MAP = Object.freeze({
   memory: new Set(['save_memory','get_personal_context']),
-  'job-search': new Set(['get_job_application_history','save_job_application']),
+  'job-search': new Set(['get_job_application_history','save_job_application','record_interview','get_workflows']),
   calendar: new Set(['create_calendar_event']),
   portfolio: new Set(['get_portfolio_summary','record_holding','delete_holding']),
   'agent-team': new Set(['delegate_to_team']),
@@ -289,7 +307,7 @@ const CAPABILITY_TOOL_MAP = Object.freeze({
 });
 
 function buildAgentTools({ job = 'general', enabledCapabilities = null } = {}) {
-  const all = [memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
+  const all = [memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, interviewTool, workflowStatusTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const enabled = enabledCapabilities == null
     ? null
@@ -364,7 +382,14 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'excel_delete') return run('excel_delete', () => deps.deleteExcelFile(deps.pool, args.file_id));
 
   if (name === 'get_job_application_history') return run('get_job_application_history', () => deps.getJobApplicationHistory(deps.pool));
-  if (name === 'save_job_application') return run('save_job_application', () => deps.saveJobApplication(deps.pool, args));
+  if (name === 'save_job_application') return run('save_job_application', () => deps.saveJobApplication(deps.pool, args, runId));
+  if (name === 'get_workflows') return run('get_workflows', () => deps.getWorkflows(deps.pool));
+  if (name === 'record_interview') return run('record_interview', () => deps.recordInterview(deps.pool, args, runId));
+  // Scheduler approvals may execute only this exact persisted task through the approved path.
+  if (name === 'deliver_workflow_message') {
+    if (!deps.skipPolicy) return { ok:false,error:'Workflow delivery is available through the scheduler approval path only.' };
+    return deps.deliverWorkflowMessage(deps.pool, args.task_id, { approved:true });
+  }
 
   if (name === 'record_holding') return run('record_holding', () => deps.recordHolding(deps.pool, args));
   if (name === 'delete_holding') {

@@ -9,8 +9,11 @@ test('router sends job requests to job search', () => {
   assert.deepEqual(names, [
     'save_memory',
     'get_personal_context',
+    'create_calendar_event',
     'get_job_application_history',
-    'save_job_application'
+    'save_job_application',
+    'record_interview',
+    'get_workflows'
   ]);
   assert.ok(tools.some(tool => tool.type === 'web_search_preview'));
 });
