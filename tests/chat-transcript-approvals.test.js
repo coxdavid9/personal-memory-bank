@@ -50,7 +50,8 @@ test('approval decision is persisted with the affected skill', async () => {
 test('inline approval rendering reconciles against live pending approvals', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(html, /pendingApprovalIds\.has\(id\)/);
-  assert.match(html, /Already decided/);
+  assert.match(html, /Approval status unavailable/);
+  assert.doesNotMatch(html, /Already decided/);
   assert.match(html, /Expired/);
   assert.match(html, /approvalStateLoaded/);
 });
