@@ -185,7 +185,16 @@ async function getWorkflows(pool) {
   return {ok:true,workflows:rows};
 }
 async function deliverWorkflowMessage(pool,taskId,{approved=false}={}) {
-  return transaction(pool,client=>deliverLocked(client,taskId,approved));
+  return transaction(pool,async client=>{
+    const result=await deliverLocked(client,taskId,approved);
+    const finished=await client.query(`UPDATE agent_workflows w SET state='complete',updated_at=NOW()
+      WHERE w.state='active' AND w.entity=(SELECT entity FROM agent_workflow_steps WHERE id=$1)
+      AND NOT EXISTS (SELECT 1 FROM agent_workflow_steps s WHERE s.entity=w.entity
+        AND s.event_id=w.event_id AND s.status IN ('pending','waiting_approval'))
+      RETURNING entity`,[taskId]);
+    for (const row of finished.rows) await retireNotes(client,row.entity);
+    return result;
+  });
 }
 async function deliverLocked(client,taskId,approved=false) {
   const reference=(await client.query('SELECT entity FROM agent_workflow_steps WHERE id=$1',[taskId])).rows[0];

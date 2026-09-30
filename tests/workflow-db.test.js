@@ -150,6 +150,14 @@ test('workflow persistence and concurrency in real PostgreSQL',{skip:!process.en
       await processDueWorkflows(pool);
       assert.equal((await pool.query('SELECT status FROM agent_workflow_steps WHERE id=$1',[next.id])).rows[0].status,'denied');
     });
+    await t.test('final delivered followup retires the managed priority note',async()=>{
+      await reset();
+      const a=await saveApplicationWithWorkflow(pool,args,'a');
+      await pool.query("UPDATE agent_workflow_steps SET due_at=NOW()-INTERVAL '1 second'");
+      await processDueWorkflows(pool);
+      assert.equal((await getWorkflows(pool)).workflows[0].state,'complete');
+      assert.equal(Number(await scalar("SELECT COUNT(*) AS n FROM memories WHERE done=false AND text LIKE '[Workflow%'")),0);
+    });
     await t.test('failed delivery rolls back chat, retries durably, and recovers in a fresh worker',async()=>{
       await reset();
       const a=await saveApplicationWithWorkflow(pool,args,'a');
