@@ -144,7 +144,7 @@ class CalDAVClient {
           0,
           '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>'
         );
-        const ph = tag(p.xml, 'href');
+        const ph = tag(tag(p.xml, 'current-user-principal') || '', 'href');
         if (!ph) throw new Error('CalDAV discovery did not return current-user-principal.');
 
         const principal = urlFor(p.url, ph);
@@ -153,7 +153,7 @@ class CalDAVClient {
           0,
           '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-home-set/></d:prop></d:propfind>'
         );
-        const hh = tag(h.xml, 'href');
+        const hh = tag(tag(h.xml, 'calendar-home-set') || '', 'href');
         if (!hh) throw new Error('CalDAV discovery did not return calendar-home-set.');
 
         const home = urlFor(h.url, hh);
@@ -167,12 +167,12 @@ class CalDAVClient {
           .map(x => ({
             href: tag(x, 'href'),
             name: tag(x, 'displayname'),
-            calendar: /<(?:[^>]*:)?calendar(?:\s|>)/i.test(x)
+            calendar: /<(?:[^>]*:)?calendar(?:\s|\/?>)/i.test(x)
           }))
           .filter(x => x.href && x.name && x.calendar);
 
         const found = candidates.find(x => x.name === this.calendarName);
-        if (!found) throw new Error(`CalDAV calendar "${this.calendarName}" was not found.`);
+        if (!found) throw Object.assign(new Error(`CalDAV calendar "${this.calendarName}" was not found.`), { availableCalendars:candidates.map(x=>x.name) });
 
         this.discoveryError = null;
         this.calendarUrl = urlFor(list.url || home, found.href);
@@ -205,18 +205,26 @@ class CalDAVClient {
     } return events.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
   }
 
+  providerName() {
+    const host = this.baseUrl ? new URL(this.baseUrl).hostname : '';
+    return host === 'caldav.calendar.yahoo.com' ? 'Yahoo Calendar' :
+      host === 'caldav.icloud.com' || host.endsWith('.icloud.com') ? 'iCloud Calendar' : 'CalDAV Calendar';
+  }
+
   async testConnection() {
-    if (!this.isConfigured()) return { connected:false, status:'not_configured' };
+    const provider = this.providerName();
+    if (!this.isConfigured()) return { connected:false, status:'not_configured', provider };
     try {
       await this.listUpcomingEvents({days:1});
-      return { connected:true, status:'connected', calendarName:this.calendarName, scope:'Reads and writes the configured calendar only.' };
+      return { connected:true, status:'connected', provider, calendarName:this.calendarName, scope:'Reads and writes the configured calendar only.' };
     } catch (err) {
       const status = [401,403].includes(err.status) ? 'authentication_failed' :
         /was not found/.test(err.message || '') ? 'calendar_missing' : 'connection_failed';
-      return { connected:false, status, calendarName:this.calendarName,
-        message:status === 'authentication_failed' ? 'Check the Apple account email and Apple app-specific password in Render.' :
-          status === 'calendar_missing' ? 'Create the configured calendar in iCloud, or set CALDAV_CALENDAR_NAME to an existing calendar.' :
-            'iCloud could not be reached or read. Check the CalDAV URL and try again.' };
+      return { connected:false, status, provider, calendarName:this.calendarName,
+        ...(status === 'calendar_missing' ? {availableCalendars:err.availableCalendars || []} : {}),
+        message:status === 'authentication_failed' ? 'Check the calendar account username and provider-generated app password in Render.' :
+          status === 'calendar_missing' ? 'Set CALDAV_CALENDAR_NAME to an exact name from availableCalendars. Do not change providers or create another calendar unless requested.' :
+            'The configured calendar service could not be reached or read. Check the CalDAV URL and try again.' };
     }
   }
 
