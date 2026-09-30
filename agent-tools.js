@@ -69,7 +69,7 @@ const recordHoldingTool = {
   }
 };
 
-const calendarEventsTool = { type:'function', name:'get_calendar_events', description:'Read upcoming events from David\'s configured iCloud/iPhone calendar. Read-only.', strict:true, parameters:{type:'object',properties:{days:{type:'integer',description:'Days ahead, default 2, maximum 14.'}},required:['days'],additionalProperties:false} };
+const calendarEventsTool = { type:'function', name:'get_calendar_events', description:'Read upcoming events from David\'s configured CalDAV calendar (Yahoo, iCloud, or another provider). Read-only.', strict:true, parameters:{type:'object',properties:{days:{type:'integer',description:'Days ahead, default 2, maximum 14.'}},required:['days'],additionalProperties:false} };
 const yahooUnreadTool={type:'function',name:'email_list_unread',description:'List unread messages in David\'s personal Yahoo mailbox. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{limit:{type:'integer'}},required:['limit'],additionalProperties:false}};
 const yahooSearchTool={type:'function',name:'email_search',description:'Search David\'s personal Yahoo mailbox by sender, subject, or keyword. Read-only; no bodies or attachments.',strict:true,parameters:{type:'object',properties:{sender:{type:['string','null']},subject:{type:['string','null']},keyword:{type:['string','null']},limit:{type:'integer'}},required:['sender','subject','keyword','limit'],additionalProperties:false}};
 const yahooReadTool={type:'function',name:'email_read',description:'Read one message body from David\'s personal Yahoo mailbox. Read-only; no attachments are downloaded.',strict:true,parameters:{type:'object',properties:{uid:{type:'integer'}},required:['uid'],additionalProperties:false}};
@@ -266,7 +266,7 @@ const interviewTool = {
 };
 
 const connectionTestTool = {
- type:'function',name:'test_connections',description:'Test the configured Yahoo inbox and iCloud calendar logins. Returns safe status and setup guidance, never credentials or email/event contents. Use when David asks whether email/calendar is connected or a login works.',
+ type:'function',name:'test_connections',description:'Test the configured Yahoo inbox and configured CalDAV calendar logins. Returns safe status and setup guidance, never credentials or email/event contents. Use when David asks whether email/calendar is connected or a login works.',
  strict:true,parameters:{type:'object',properties:{},required:[],additionalProperties:false}
 };
 
