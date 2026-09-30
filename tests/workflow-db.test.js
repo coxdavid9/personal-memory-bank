@@ -162,7 +162,7 @@ test('workflow persistence and concurrency in real PostgreSQL',{skip:!process.en
       await reset();
       const a=await saveApplicationWithWorkflow(pool,args,'a');
       await recordInterview(pool,interview(a.application.id),'i1');
-      await pool.query(`CREATE FUNCTION fail_chat() RETURNS trigger AS $ BEGIN RAISE EXCEPTION 'test write failure'; END $ LANGUAGE plpgsql`);
+      await pool.query(`CREATE FUNCTION fail_chat() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'test write failure'; END $$ LANGUAGE plpgsql`);
       await pool.query(`CREATE TRIGGER fail_chat BEFORE INSERT ON agent_messages FOR EACH ROW EXECUTE FUNCTION fail_chat()`);
       await processDueWorkflows(pool);
       assert.equal(Number(await scalar('SELECT COUNT(*) AS n FROM agent_messages')),0);
