@@ -13,31 +13,19 @@ const tag = (xml, name) => {
   return m ? decode(m[1].trim()) : null;
 };
 
+// Match the element's qualified name, never colons inside xmlns attributes.
 const responses = xml => {
   const text = String(xml);
   const out = [];
-  let cursor = 0;
-
-  while (cursor < text.length) {
-    const open = text.indexOf('<', cursor);
-    if (open < 0) break;
-
-    const close = text.indexOf('>', open + 1);
-    if (close < 0) break;
-
-    const head = text.slice(open + 1, close).trim();
-    const localName = head.replace(/^\/?(?:[^:>]+:)?/, '').split(/\s/)[0].toLowerCase();
-
-    if (localName === 'response' && !head.startsWith('/')) {
-      const endTag = text.toLowerCase().indexOf('</' + (head.includes(':') ? head.split(':')[0] + ':' : '') + 'response>', close + 1);
-      if (endTag < 0) break;
-      out.push(text.slice(open, endTag + (head.includes(':') ? head.split(':')[0].length + 11 : 11)));
-      cursor = endTag + (head.includes(':') ? head.split(':')[0].length + 11 : 11);
-    } else {
-      cursor = close + 1;
-    }
+  const open = /<((?:[A-Za-z_][\w.-]*:)?response)\b[^>]*>/gi;
+  let match;
+  while ((match = open.exec(text))) {
+    const close = '</' + match[1] + '>';
+    const end = text.toLowerCase().indexOf(close.toLowerCase(), open.lastIndex);
+    if (end < 0) break;
+    out.push(text.slice(match.index, end + close.length));
+    open.lastIndex = end + close.length;
   }
-
   return out;
 };
 
@@ -171,6 +159,10 @@ class CalDAVClient {
           }))
           .filter(x => x.href && x.name && x.calendar);
 
+        if (!candidates.length) throw Object.assign(new Error('CalDAV returned no discoverable calendars.'), {
+          code:'discovery_empty',
+          diagnostics:{responseCount:responses(list.xml).length, namedResponseCount:responses(list.xml).filter(x=>tag(x,'displayname')).length}
+        });
         const found = candidates.find(x => x.name === this.calendarName);
         if (!found) throw Object.assign(new Error(`CalDAV calendar "${this.calendarName}" was not found.`), { availableCalendars:candidates.map(x=>x.name) });
 
@@ -219,10 +211,13 @@ class CalDAVClient {
       return { connected:true, status:'connected', provider, calendarName:this.calendarName, scope:'Reads and writes the configured calendar only.' };
     } catch (err) {
       const status = [401,403].includes(err.status) ? 'authentication_failed' :
+        err.code === 'discovery_empty' ? 'discovery_empty' :
         /was not found/.test(err.message || '') ? 'calendar_missing' : 'connection_failed';
       return { connected:false, status, provider, calendarName:this.calendarName,
         ...(status === 'calendar_missing' ? {availableCalendars:err.availableCalendars || []} : {}),
+        ...(status === 'discovery_empty' ? {diagnostics:err.diagnostics} : {}),
         message:status === 'authentication_failed' ? 'Check the calendar account username and provider-generated app password in Render.' :
+          status === 'discovery_empty' ? 'No calendar collections could be discovered. This does not establish that the configured name is wrong. Keep the calendar name unchanged and check discovery diagnostics.' :
           status === 'calendar_missing' ? 'Set CALDAV_CALENDAR_NAME to an exact name from availableCalendars. Do not change providers or create another calendar unless requested.' :
             'The configured calendar service could not be reached or read. Check the CalDAV URL and try again.' };
     }
