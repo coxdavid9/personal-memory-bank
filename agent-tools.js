@@ -250,11 +250,11 @@ const excelDeleteTool = {
 
 const JOB_SKILLS = Object.freeze({
   general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team'],
-  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
+  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['save_memory','get_personal_context','create_calendar_event','get_calendar_events'],
+  calendar: ['save_memory','get_personal_context','create_calendar_event','get_calendar_events','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
