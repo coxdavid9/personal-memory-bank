@@ -12,6 +12,7 @@ const DEFAULT_POLICIES = Object.freeze({
   excel_delete: TIERS.ASK,
   create_calendar_event: TIERS.ASK,
   get_calendar_events: TIERS.SAFE,
+  test_connections: TIERS.SAFE,
   email_list_unread: TIERS.SAFE,
   email_search: TIERS.SAFE,
   email_read: TIERS.SAFE,

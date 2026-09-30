@@ -265,15 +265,20 @@ const interviewTool = {
   },required:['application_id','status','start','format','notes','expected_response_at'],additionalProperties:false}
 };
 
+const connectionTestTool = {
+ type:'function',name:'test_connections',description:'Test the configured Yahoo inbox and iCloud calendar logins. Returns safe status and setup guidance, never credentials or email/event contents. Use when David asks whether email/calendar is connected or a login works.',
+ strict:true,parameters:{type:'object',properties:{},required:[],additionalProperties:false}
+};
+
 const JOB_SKILLS = Object.freeze({
-  general: ['save_memory','get_personal_context','get_portfolio_summary','delegate_to_team','get_workflows'],
-  email: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
-  calendar_read: ['save_memory','get_personal_context','get_calendar_events'],
-  communications: ['save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event','get_job_application_history','record_interview','get_workflows'],
+  general: ['test_connections','save_memory','get_personal_context','get_portfolio_summary','delegate_to_team','get_workflows'],
+  email: ['test_connections','save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
+  calendar_read: ['test_connections','save_memory','get_personal_context','get_calendar_events'],
+  communications: ['test_connections','save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','create_calendar_event','get_job_application_history','record_interview','get_workflows'],
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows','create_calendar_event'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['save_memory','get_personal_context','create_calendar_event'],
+  calendar: ['test_connections','save_memory','get_personal_context','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
@@ -298,7 +303,7 @@ function inferJob(message = '', hasFiles = false) {
 const CAPABILITY_TOOL_MAP = Object.freeze({
   memory: new Set(['save_memory','get_personal_context']),
   'job-search': new Set(['get_job_application_history','save_job_application','record_interview','get_workflows']),
-  calendar: new Set(['create_calendar_event']),
+  calendar: new Set(['create_calendar_event','get_calendar_events']),
   portfolio: new Set(['get_portfolio_summary','record_holding','delete_holding']),
   'agent-team': new Set(['delegate_to_team']),
   excel: new Set(['excel_summary','excel_query','excel_build','excel_delete']),
@@ -307,7 +312,7 @@ const CAPABILITY_TOOL_MAP = Object.freeze({
 });
 
 function buildAgentTools({ job = 'general', enabledCapabilities = null } = {}) {
-  const all = [memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, interviewTool, workflowStatusTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
+  const all = [connectionTestTool, memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, interviewTool, workflowStatusTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const enabled = enabledCapabilities == null
     ? null
@@ -445,6 +450,13 @@ async function executeAgentTool(name, args, deps) {
     });
   }
 
+  if (name === 'test_connections') return run('test_connections', async () => {
+    const [yahoo, calendar] = await Promise.all([
+      deps.emailClients?.yahoo?.testConnection() || {connected:false,status:'not_configured'},
+      deps.caldav?.testConnection() || {connected:false,status:'not_configured'}
+    ]);
+    return {ok:true, checkedAt:new Date().toISOString(), yahoo, calendar};
+  });
   if (name === 'get_calendar_events') return run('get_calendar_events', async () => { if (!deps.caldav?.isConfigured()) return {ok:true,connected:false,message:'calendar not connected',events:[]}; const days=Math.min(14,Math.max(1,Number(args.days)||2)); return {ok:true,connected:true,days,events:await deps.caldav.listUpcomingEvents({days})}; });
   if (name === 'email_list_unread') return run('email_list_unread', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.listUnread(args.limit)}; });
   if (name === 'email_search') return run('email_search', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.search(args)}; });
