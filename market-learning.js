@@ -1,0 +1,4 @@
+async function initMarketLearningDb(pool){if(!pool)return;await pool.query(`CREATE TABLE IF NOT EXISTS market_learning_topics(id BIGSERIAL PRIMARY KEY,topic TEXT NOT NULL,learned_at TIMESTAMPTZ NOT NULL DEFAULT NOW());CREATE INDEX IF NOT EXISTS market_learning_topics_recent_idx ON market_learning_topics(learned_at DESC)`);}
+async function listMarketLearning(pool,limit=20){if(!pool)return[];const {rows}=await pool.query('SELECT id,topic,learned_at FROM market_learning_topics ORDER BY learned_at DESC LIMIT $1',[Math.max(1,Math.min(100,Number(limit)||20))]);return rows;}
+async function recordMarketLearning(pool,topic){const clean=String(topic||'').trim().slice(0,240);if(!pool||!clean)return null;const {rows}=await pool.query('INSERT INTO market_learning_topics(topic) VALUES($1) RETURNING id,topic,learned_at',[clean]);return rows[0];}
+module.exports={initMarketLearningDb,listMarketLearning,recordMarketLearning};
