@@ -127,11 +127,28 @@ class CalDAVClient {
 
     this.discoveryPromise = (async () => {
       try {
-        const p = await this.propfind(
-          this.baseUrl,
-          0,
-          '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>'
-        );
+        const principalBody = '<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>';
+        const discoveryUrls = [this.baseUrl];
+        if (this.providerName() === 'iCloud Calendar') {
+          const wellKnown = new URL('/.well-known/caldav', this.baseUrl).toString();
+          if (!discoveryUrls.includes(wellKnown)) discoveryUrls.push(wellKnown);
+        }
+
+        let p = null;
+        let discoveryFailure = null;
+        for (const discoveryUrl of discoveryUrls) {
+          try {
+            p = await this.propfind(discoveryUrl, 0, principalBody);
+            const candidatePrincipal = tag(tag(p.xml, 'current-user-principal') || '', 'href');
+            if (candidatePrincipal) break;
+            discoveryFailure = new Error('CalDAV discovery did not return current-user-principal.');
+            p = null;
+          } catch (err) {
+            discoveryFailure = err;
+            p = null;
+          }
+        }
+        if (!p) throw discoveryFailure || new Error('CalDAV discovery failed.');
         const ph = tag(tag(p.xml, 'current-user-principal') || '', 'href');
         if (!ph) throw new Error('CalDAV discovery did not return current-user-principal.');
 
