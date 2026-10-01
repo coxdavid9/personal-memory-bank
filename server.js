@@ -8,6 +8,7 @@ const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = re
 const { CAPABILITY_DEFINITIONS } = require('./agent-capabilities');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { buildEmailClientsFromEnv, isActionableEmail } = require('./email');
+const { buildGoogleOAuthFromEnv } = require('./google-oauth');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
@@ -32,7 +33,8 @@ const clearCfoApiUrl = process.env.CLEARCFO_API_URL || '';
 const authPassword = process.env.PERSONAL_AGENT_PASSWORD || '';
 const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
-const emailClients = buildEmailClientsFromEnv();
+const googleOAuth = buildGoogleOAuthFromEnv();
+const emailClients = buildEmailClientsFromEnv(undefined,{googleOAuth:googleOAuth.isConfigured()?googleOAuth:null});
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 const github = buildGitHubClientFromEnv();
 const renderOps = buildRenderClientFromEnv();
@@ -79,6 +81,11 @@ function requireAuth(req, res, next) {
 const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
+function oauthCipherKey(){return crypto.createHash('sha256').update(authSecret).digest();}
+function encryptSecret(value){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',oauthCipherKey(),iv);const body=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),body].map(x=>x.toString('base64url')).join('.');}
+function decryptSecret(value){const [iv,tag,body]=String(value).split('.').map(x=>Buffer.from(x,'base64url'));const d=crypto.createDecipheriv('aes-256-gcm',oauthCipherKey(),iv);d.setAuthTag(tag);return Buffer.concat([d.update(body),d.final()]).toString('utf8');}
+async function initGoogleOAuthStore(){if(!pool||!authSecret)return;await pool.query('CREATE TABLE IF NOT EXISTS oauth_tokens(provider TEXT PRIMARY KEY, encrypted_refresh_token TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');const {rows}=await pool.query("SELECT encrypted_refresh_token FROM oauth_tokens WHERE provider='work_gmail'");if(rows[0])googleOAuth.refreshToken=decryptSecret(rows[0].encrypted_refresh_token);googleOAuth.onRefreshToken=async token=>{await pool.query("INSERT INTO oauth_tokens(provider,encrypted_refresh_token,updated_at) VALUES('work_gmail',$1,NOW()) ON CONFLICT(provider) DO UPDATE SET encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,updated_at=NOW()",[encryptSecret(token)]);};}
+
 
 app.use(express.json({ limit: '5mb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
@@ -773,6 +780,10 @@ app.get('/api/team', async (req, res) => {
   }
 });
 
+app.get('/api/google/oauth/status',(req,res)=>res.json({configured:googleOAuth.isConfigured(),connected:googleOAuth.isConnected(),account:process.env.GOOGLE_IMAP_USER||null}));
+app.get('/api/google/oauth/start',(req,res)=>{try{res.redirect(googleOAuth.createAuthorizationUrl());}catch(err){res.status(503).json({error:err.message});}});
+app.get('/api/google/oauth/callback',async(req,res)=>{try{if(!googleOAuth.consumeState(req.query.state))return res.status(400).type('html').send('Invalid or expired Google OAuth state. Return to Jarvis and try again.');if(req.query.error)return res.status(400).type('html').send('Google authorization was not granted.');const tokens=await googleOAuth.exchangeCode(String(req.query.code||''));if(!tokens.refresh_token&&!googleOAuth.isConnected())return res.status(400).type('html').send('Google did not return offline access. Return to Jarvis and reconnect.');res.redirect('/?gmail=connected');}catch(err){console.error('Google OAuth callback failed:',err.message);res.status(400).type('html').send('Unable to connect work Gmail: '+String(err.message).replace(/[<>&]/g,''));}});
+
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
 app.get('/api/agent/context', async (req, res) => {
@@ -1003,6 +1014,7 @@ app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html'))
 
 if (require.main === module) {
   initDb().then(async () => {
+    await initGoogleOAuthStore();
     if (pool) {
       let workflowTickRunning = false;
       const tick = async () => {
