@@ -12,6 +12,7 @@ const { buildGoogleOAuthFromEnv } = require('./google-oauth');
 const { GoogleCalendarClient } = require('./google-calendar');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
+const { initMarketSentinelDb, listWatchlist, addWatch, removeWatch, getMarketSentinelState } = require('./market-sentinel');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
@@ -168,6 +169,7 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS agent_messages_created_idx ON agent_messages(created_at DESC)`);
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
+  await initMarketSentinelDb(pool);
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
@@ -743,6 +745,10 @@ app.post('/api/internal/daily-portfolio', async (req, res) => {
     res.status(500).json({ error: err.message || 'Daily portfolio agent failed.' });
   }
 });
+
+app.get('/api/market-sentinel', async (req,res)=>{try{res.json(await getMarketSentinelState(pool));}catch(err){res.status(500).json({error:err.message||'Unable to load Market Sentinel.'});}});
+app.post('/api/market-sentinel/watchlist', async (req,res)=>{try{const r=await addWatch(pool,req.body||{});res.status(r.ok?200:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
+app.delete('/api/market-sentinel/watchlist/:ticker', async (req,res)=>{try{res.json(await removeWatch(pool,req.params.ticker));}catch(err){res.status(500).json({error:err.message});}});
 
 app.get('/api/portfolio', async (req,res) => {
   try { res.json(await getPortfolioSummary(pool)); }
