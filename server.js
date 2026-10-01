@@ -334,7 +334,7 @@ async function getAgentContext(db = pool, options = {}) {
   const githubPromise = includeGithub && githubClient?.getPriorityRadar
     ? githubClient.getPriorityRadar().then(radar => ({ ...radar, items: buildGitHubPriorityItems(radar) })).catch(() => emptyGithub)
     : Promise.resolve(emptyGithub);
-  const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.listUnread(10).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listUnread(10).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail])=>({yahoo:yahoo.filter(isActionableEmail).slice(0,5),gmail:gmail.filter(isActionableEmail).slice(0,5)})) : Promise.resolve({yahoo:[],gmail:[]});
+  const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.search({limit:25}).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail])=>{const cutoff=Date.now()-(36*60*60*1000);const recent=items=>items.filter(m=>!m.date||new Date(m.date).getTime()>=cutoff).filter(isActionableEmail).slice(0,8);return {yahoo:recent(yahoo),gmail:recent(gmail)};}) : Promise.resolve({yahoo:[],gmail:[]});
   const calendarPromise = includeRadar ? Promise.all([caldav?caldav.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([]),googleOAuth.isConnected()?googleCalendar.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([])]).then(([personal,work])=>({personal,work})) : Promise.resolve({personal:[],work:[]});
 
   if (!db) {
