@@ -1,0 +1,4 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {pct,latestAnnual,priorAnnual}=require('../sec-fundamentals');
+const facts={facts:{'us-gaap':{Revenues:{units:{USD:[{form:'10-K',fy:2025,val:100,filed:'2026-02-01',end:'2025-12-31'},{form:'10-K',fy:2024,val:80,filed:'2025-02-01',end:'2024-12-31'}]}}}}};
+test('calculates annual growth',()=>{const cur=latestAnnual(facts,['Revenues']);const prev=priorAnnual(facts,['Revenues'],cur);assert.equal(cur.value,100);assert.equal(prev.value,80);assert.equal(pct(cur.value,prev.value),25);});
+test('missing XBRL concepts stay null rather than invented',()=>{assert.equal(latestAnnual(facts,['NetIncomeLoss']),null);});
