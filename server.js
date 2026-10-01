@@ -940,10 +940,12 @@ app.post('/api/agent/chat', async (req, res) => {
   const message = String(req.body.message || '').trim().slice(0, 10000);
   const image = req.body.imageDataUrl || null;
   const fileIds = Array.isArray(req.body.fileIds) ? req.body.fileIds : [];
+  const scope = req.body.scope === 'market' ? 'market' : null;
   if (!message && !image && !fileIds.length) return res.status(400).json({ error: 'Message or image is required.' });
   try {
     const rawFileIds = Array.isArray(req.body.fileIds) ? req.body.fileIds : [];
-    const result = await runAgent(message, image, rawFileIds);
+    const scopedMessage = scope === 'market' ? `[MARKET MODE]\nStay strictly within stocks, ETFs, investing education, Market Sentinel, Opportunity Watch, SEC/company fundamentals, valuation, market news, and the user's portfolio. Do not route to Job Search, ClearCFO, email, calendar, or unrelated projects even if similar words such as "opportunity" appear. Check available market/portfolio state before suggesting follow-up questions; never suggest portfolio performance/allocation questions when there are no holdings. This mode informs and teaches; it does not place trades.\n\nUser request: ${message}` : message;
+    const result = await runAgent(scopedMessage, image, rawFileIds);
     if (pool) {
       await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message || (rawFileIds.length ? '[Excel files attached]' : '[Image attached]')]);
       await pool.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)', ['assistant', result.text, JSON.stringify(result.actions || [])]);
