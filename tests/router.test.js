@@ -8,6 +8,14 @@ test('router sends calendar requests to calendar skills only', () => {
   assert.deepEqual(names, ['test_connections','save_memory','get_personal_context','create_calendar_event']);
 });
 
+
+test('router tolerates calendar misspellings and explicit event creation language', () => {
+  assert.equal(inferJob('Make a test event on my caleder for 30 minutes at 8pm tonight'), 'calendar');
+  assert.equal(inferJob('Create an event for 8pm tonight'), 'calendar');
+  const job = inferJob('Make a test event on my caleder for 30 minutes at 8pm tonight');
+  assert.ok(buildAgentTools({job,enabledCapabilities:['calendar']}).some(t=>t.name==='create_calendar_event'));
+});
+
 test('router sends portfolio requests to portfolio skills', () => {
   assert.equal(inferJob('How is my Fidelity portfolio doing?'), 'portfolio');
   const names = buildAgentTools({ job: 'portfolio' }).map(tool => tool.name);
