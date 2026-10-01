@@ -306,7 +306,7 @@ function inferJob(message = '', hasFiles = false, recent = []) {
   if (/job|jobs|career|hiring|position|opening|accounting role|finance role|apply|application|interview|follow.?up|workflow/.test(text)) return 'job_search';
   if (/email.*calendar|calendar.*email/.test(text)) return 'communications';
   if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
-  if (/upcoming events|calendar events|what(?:'s| is) on my calendar|what do i have (?:scheduled|on my calendar)/.test(text)) return 'calendar_read';
+  if (/upcoming events|calendar events|what(?:'s| is|s) on (?:my )?(?:work )?calendar|what do i have (?:scheduled|on my calendar)|work calendar/.test(text)) return 'calendar_read';
   if (/calendar|calender|caledar|caleder|schedule|appointment|meeting|block time|reminder on my iphone/.test(text) || /\b(?:make|create|add|put)\b[\s\S]{0,80}\bevent\b/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
   if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
@@ -471,7 +471,7 @@ async function executeAgentTool(name, args, deps) {
     ]);
     return {ok:true, checkedAt:new Date().toISOString(), yahoo, calendar};
   });
-  if (name === 'get_calendar_events') return run('get_calendar_events', async () => { if (!deps.caldav?.isConfigured()) return {ok:true,connected:false,message:'calendar not connected',events:[]}; const days=Math.min(14,Math.max(1,Number(args.days)||2)); const [personal,work]=await Promise.all([deps.caldav?.isConfigured()?deps.caldav.listUpcomingEvents({days}):Promise.resolve([]),deps.googleCalendar?.isConfigured()?deps.googleCalendar.listUpcomingEvents({days}):Promise.resolve([])]); return {ok:true,connected:true,days,personalCalendar:personal,workCalendar:work}; });
+  if (name === 'get_calendar_events') return run('get_calendar_events', async () => { if (!deps.caldav?.isConfigured() && !deps.googleCalendar?.isConfigured()) return {ok:true,connected:false,message:'calendar not connected',events:[]}; const days=Math.min(14,Math.max(1,Number(args.days)||2)); const [personal,work]=await Promise.all([deps.caldav?.isConfigured()?deps.caldav.listUpcomingEvents({days}):Promise.resolve([]),deps.googleCalendar?.isConfigured()?deps.googleCalendar.listUpcomingEvents({days}):Promise.resolve([])]); return {ok:true,connected:true,days,personalCalendar:personal,workCalendar:work}; });
   if (name === 'email_list_unread') return run('email_list_unread', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.listUnread(args.limit)}; });
   if (name === 'email_search') return run('email_search', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'personal Yahoo',messages:await deps.emailClients.yahoo.search(args)}; });
   if (name === 'email_read') return run('email_read', async () => { if (!deps.emailClients?.yahoo?.isConfigured()) return {ok:true,connected:false,message:'personal email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'personal Yahoo',message:await deps.emailClients.yahoo.read(args.uid)}; });
