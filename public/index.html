@@ -121,7 +121,7 @@ main{max-width:1180px}
         <button class="prompt-card" onclick="marketPrompt('Help me compare two stocks. Ask me for the tickers and explain the important differences in plain English.')"><strong>Compare stocks</strong><span>Understand two companies side by side.</span></button>
         <button class="prompt-card" onclick="marketPrompt('Teach me one stock-market concept that would be useful for me to understand next. Use a practical example and keep it beginner friendly.')"><strong>Teach me</strong><span>Learn one useful concept at a time.</span></button>
         <button class="prompt-card" onclick="marketPrompt('Show me my Opportunity Watch and explain what each status means and what I could research next.')"><strong>Opportunity Watch</strong><span>Review stocks under consideration.</span></button>
-        <button class="prompt-card" onclick="marketPrompt('Based on what Market Sentinel and Opportunity Watch can currently do, give me 4 useful questions I could ask you next and explain why each question is useful.')"><strong>What should I ask?</strong><span>Get ideas when you don't know where to start.</span></button>
+        <button class="prompt-card" onclick="marketPrompt('Give me 4 useful MARKET OR INVESTING questions I could ask next. Use my current Market Sentinel, Opportunity Watch, and portfolio state. Do not include jobs, career, ClearCFO, email, calendar, or unrelated projects. Do not suggest questions that require data I do not currently have. If my portfolio has no holdings, do not suggest portfolio performance or allocation questions. If Opportunity Watch is empty, suggest how to begin using it. Keep the questions focused on learning the stock market and researching investments.')"><strong>What should I ask?</strong><span>Get ideas when you don't know where to start.</span></button>
       </div>
       <div class="drawer-section market-portfolio"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
     </div>
@@ -137,6 +137,7 @@ let selectedImageDataUrl=null;
 let chatSyncTimer=null;
 let sendInFlight=false;
 let chatSyncBusy=false;
+let pendingChatScope=null;
 async function api(path,options={}){const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed');return data}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 let approvalStateLoaded=false; let pendingApprovalIds=new Set(); let decidedApprovals=new Map();
@@ -325,10 +326,10 @@ async function load(){
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
 function setWorking(active){document.getElementById('app')?.classList.toggle('working',active);const status=document.getElementById('statusLine');if(status)status.textContent=active?'Working':'Ready'}
-async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;setWorking(true);messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await loadApprovals().catch(()=>{});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{sendInFlight=false;setWorking(false)}}
+async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;setWorking(true);messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image,scope:pendingChatScope})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await loadApprovals().catch(()=>{});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{pendingChatScope=null;sendInFlight=false;setWorking(false)}}
 function quick(text){document.getElementById('message').value=text;send()}
 function openSection(name='home'){const map={market:['Market','Learn, research, and understand your investments.'],projects:['Projects','Your active work.'],connections:['Connections','Services Jarvis can read or use.'],memory:['Memory','Information available to Jarvis.'],settings:['Settings','Capabilities and controls.'],home:['Jarvis','Choose where you want to go.']};document.getElementById('drawerHome').style.display=name==='home'?'grid':'none';document.querySelectorAll('.drawer-view').forEach(el=>el.classList.add('hidden'));if(name!=='home'){const el=document.getElementById('section'+name.charAt(0).toUpperCase()+name.slice(1));if(el)el.classList.remove('hidden')}const meta=map[name]||map.home;document.getElementById('drawerTitle').textContent=meta[0];document.getElementById('drawerSubtitle').textContent=meta[1];}
-function marketPrompt(text){toggleDrawer(false);document.getElementById('message').value=text;send()}
+function marketPrompt(text){pendingChatScope='market';toggleDrawer(false);document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open);if(open)openSection('home')}
 
 load();
