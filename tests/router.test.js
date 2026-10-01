@@ -73,3 +73,11 @@ test('server supplies recent chat history to the router',()=>{
  const fs=require('fs'),path=require('path');
  assert.match(fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8'),/inferJob\(message, excelFiles\.length > 0, recent\)/);
 });
+
+test('mobile shell prevents horizontal page overflow',()=>{
+ const fs=require('fs'),path=require('path');
+ const html=fs.readFileSync(path.join(__dirname,'..','public','index.html'),'utf8');
+ assert.match(html,/overflow-x:hidden/);
+ assert.match(html,/overflow-wrap:anywhere/);
+ assert.match(html,/\.composer input\{flex:1;min-width:0\}/);
+});
