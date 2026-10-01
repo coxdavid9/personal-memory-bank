@@ -342,19 +342,21 @@ async function getAgentContext(db = pool, options = {}) {
     : Promise.resolve(emptyGithub);
   const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.search({limit:25}).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail])=>{const cutoff=Date.now()-(36*60*60*1000);const recent=items=>items.filter(m=>!m.date||new Date(m.date).getTime()>=cutoff).filter(isActionableEmail).slice(0,8);return {yahoo:recent(yahoo),gmail:recent(gmail)};}) : Promise.resolve({yahoo:[],gmail:[]});
   const calendarPromise = includeRadar ? Promise.all([caldav?caldav.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([]),googleOAuth.isConnected()?googleCalendar.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([])]).then(([personal,work])=>({personal,work})) : Promise.resolve({personal:[],work:[]});
+  const marketPromise = includeRadar ? getMarketSentinelState(db).catch(()=>({watchlist:[],material:[],investigations:[]})) : Promise.resolve({watchlist:[],material:[],investigations:[]});
+  const approvalsPromise = includeRadar && db ? db.query(`SELECT id, created_at AS "createdAt", expires_at AS "expiresAt", skill, args FROM tool_approvals WHERE status='pending' AND expires_at > NOW() ORDER BY created_at ASC LIMIT 10`).then(r=>r.rows).catch(()=>[]) : Promise.resolve([]);
 
   if (!db) {
-    const [githubRadar,radarEmail,radarCalendar] = await Promise.all([githubPromise,emailPromise,calendarPromise]);
+    const [githubRadar,radarEmail,radarCalendar,radarMarket,radarApprovals] = await Promise.all([githubPromise,emailPromise,calendarPromise,marketPromise,approvalsPromise]);
     return {
       memories: [],
       projects: [],
       capabilities: [],
       portfolioState: { manualCount: 0, plaidCount: 0 },
-      priorityContext: { memories: [], jobs: [], github: githubRadar, email: radarEmail, calendar: radarCalendar }
+      priorityContext: { memories: [], jobs: [], github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals }
     };
   }
 
-  const [memories, projects, capabilities, jobs, portfolio, githubRadar, radarEmail, radarCalendar] = await Promise.all([
+  const [memories, projects, capabilities, jobs, portfolio, githubRadar, radarEmail, radarCalendar, radarMarket, radarApprovals] = await Promise.all([
     db.query(`SELECT id, created_at AS created, text, type, due_at AS due, priority, done FROM memories ORDER BY done ASC, due ASC NULLS LAST, created_at DESC LIMIT 80`),
     db.query(`SELECT id, name, description, status FROM agent_projects WHERE status='active' ORDER BY name`),
     db.query(`SELECT key, name, description, enabled, config FROM agent_capabilities ORDER BY name`),
@@ -368,7 +370,9 @@ async function getAgentContext(db = pool, options = {}) {
               FROM holdings`),
     githubPromise,
     emailPromise,
-    calendarPromise
+    calendarPromise,
+    marketPromise,
+    approvalsPromise
   ]);
   const portfolioState = buildPortfolioContext({
     manualCount: portfolio.rows[0]?.manualCount,
@@ -383,7 +387,7 @@ async function getAgentContext(db = pool, options = {}) {
     capabilities: capabilities.rows,
     portfolioState,
     portfolioGuidance: portfolioState.guidance,
-    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar, email: radarEmail, calendar: radarCalendar }
+    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals }
   };
 }
 
@@ -419,6 +423,7 @@ Architecture rules:
   - Priority hygiene is strict: when David asks what he should work on, use only context.priorityContext as the candidate pool. List only actionable items, each with a concrete next-step verb (fix, verify, send, review, build…). Never include "ignore X", "don't do Y", "X is stale", or equivalent dismissal work. Dismissed, deleted, ignored, and resolved items are omitted silently. If everything is handled, say so in one line.
   - GitHub work radar is read-only and is populated only for work-priority questions. Treat context.priorityContext.github.items as candidates alongside memories and jobs.\n  - Work-radar email/calendar candidates live in context.priorityContext.email and context.priorityContext.calendar. Use concrete verbs such as \"Reply to X about Y\" and \"You have X at 2pm\". Never include newsletters, promotions, or automated messages as priority candidates. For a green, mergeable PR use the concrete form "Review/merge PR #N — CI green"; for a failing PR use "PR #N failing CI"; for a failing default branch check use "main is failing on X". Open issues may be surfaced as "Review issue #N — title". Never auto-merge, auto-push, or auto-fix from the radar; David decides when to merge. If the GitHub radar is empty, omit it silently.
   - GitHub priority radar data is empty when GITHUB_TOKEN is unset; do not mention the missing token or produce integration-error noise.
+  - ATTENTION ENGINE: For priority/briefing questions, synthesize across live calendar, actionable email, pending approvals, GitHub radar, active memories/projects, job workflow state, and Market Sentinel. Rank by: (1) time-sensitive commitments or deadlines, (2) actions waiting on David, (3) meaningful new changes that affect a decision, then (4) useful project progress. Suppress duplicates and low-value FYI noise. Prefer 3 items; use fewer when fewer truly matter, and never pad the list. Each item must state why it matters now and one concrete next action. Calendar conflicts or events starting soon outrank routine email. Pending approvals should be surfaced when still live. Market appears only for material moves/events; never surface ordinary watchlist quotes as attention items. Do not invent urgency, deadlines, replies, or completion state. End with a short "Everything else" line only when there is genuinely useful lower-priority context.
   - Dismissed job postings stay in job history for explicit questions, but never enter priority candidates. When David says a posting is stale/closed/no longer available, record it as status "ignore" and acknowledge in one line.
 - Interview/workflow state is durable. For confirmed interviews, look up the tracked application id, then call record_interview; create a job record first if needed. Ask for a missing date/time rather than guessing. Use explicit timezone offsets. Record scheduled, completed, cancelled, or response_received as David reports them. A promised response date belongs in expected_response_at. A scheduled interview creates Jarvis chat steps only; use create_calendar_event separately when requested.
 - Read get_workflows before reporting current follow-ups. Live workflow state outranks old chat reminders and retired memory notes. A due follow-up does not prove no reply arrived: ask or verify with an explicitly requested email read. Background V1 creates checklists and draft messages, not automatic company research, email sends, applications, or calendar writes.
@@ -431,6 +436,10 @@ ${JSON.stringify(context.priorityContext?.github || { repos: [], items: [] }, nu
 ${JSON.stringify(context.priorityContext?.email || { yahoo: [], gmail: [] }, null, 2)}
 - Live priority calendars (personal + work Google Calendar; populated only for priority/briefing questions):
 ${JSON.stringify(context.priorityContext?.calendar || { personal: [], work: [] }, null, 2)}
+- Live pending approvals (populated only for priority/briefing questions):
+${JSON.stringify(context.priorityContext?.approvals || [], null, 2)}
+- Live Market Sentinel state (populated only for priority/briefing questions):
+${JSON.stringify(context.priorityContext?.market || { watchlist: [], material: [], investigations: [] }, null, 2)}
 - Derived portfolio guidance (when present):
 ${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
