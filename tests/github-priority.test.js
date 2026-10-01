@@ -81,3 +81,10 @@ test('GitHub radar client is read-only and ignores bot noise in issues', () => {
   assert.match(source, /slice\(0, 5\)/);
   assert.match(source, /listBranchCheckRuns/);
 });
+
+
+test('attention context exposes market and approval signal buckets when radar is enabled', async () => {
+  const context = await getAgentContext(null, { includeGithub: true, githubClient: { getPriorityRadar: async () => ({ repos: [] }) } });
+  assert.ok(context.priorityContext.market);
+  assert.ok(Array.isArray(context.priorityContext.approvals));
+});
