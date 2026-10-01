@@ -275,7 +275,7 @@ function isWorkPriorityQuestion(message = '') {
   if (!text) return false;
   return [
     /what should i (?:work on|do|tackle|focus on|handle)/,
-    /what do i need to (?:do|work on|tackle|focus on)/,
+    /what do i need to (?:do|work on|tackle|focus on|know)(?: today)?/,
     /what needs (?:doing|to be done)/,
     /what(?:'s| is) next(?: up)?/,
     /what are my (?:top )?priorit(?:y|ies)/,
@@ -421,6 +421,10 @@ Architecture rules:
 ${JSON.stringify(context.portfolioState, null, 2)}
 - GitHub work radar (populated only for work-priority questions):
 ${JSON.stringify(context.priorityContext?.github || { repos: [], items: [] }, null, 2)}
+- Live priority email (personal Yahoo + work Gmail; populated only for priority/briefing questions):
+${JSON.stringify(context.priorityContext?.email || { yahoo: [], gmail: [] }, null, 2)}
+- Live priority calendars (personal + work Google Calendar; populated only for priority/briefing questions):
+${JSON.stringify(context.priorityContext?.calendar || { personal: [], work: [] }, null, 2)}
 - Derived portfolio guidance (when present):
 ${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
