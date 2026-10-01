@@ -81,6 +81,11 @@ function requireAuth(req, res, next) {
 const pool = hasDatabase
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
   : null;
+function oauthCipherKey(){return crypto.createHash('sha256').update(authSecret).digest();}
+function encryptSecret(value){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',oauthCipherKey(),iv);const body=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),body].map(x=>x.toString('base64url')).join('.');}
+function decryptSecret(value){const [iv,tag,body]=String(value).split('.').map(x=>Buffer.from(x,'base64url'));const d=crypto.createDecipheriv('aes-256-gcm',oauthCipherKey(),iv);d.setAuthTag(tag);return Buffer.concat([d.update(body),d.final()]).toString('utf8');}
+async function initGoogleOAuthStore(){if(!pool||!authSecret)return;await pool.query('CREATE TABLE IF NOT EXISTS oauth_tokens(provider TEXT PRIMARY KEY, encrypted_refresh_token TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');const {rows}=await pool.query("SELECT encrypted_refresh_token FROM oauth_tokens WHERE provider='work_gmail'");if(rows[0])googleOAuth.refreshToken=decryptSecret(rows[0].encrypted_refresh_token);googleOAuth.onRefreshToken=async token=>{await pool.query("INSERT INTO oauth_tokens(provider,encrypted_refresh_token,updated_at) VALUES('work_gmail',$1,NOW()) ON CONFLICT(provider) DO UPDATE SET encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,updated_at=NOW()",[encryptSecret(token)]);};}
+
 
 app.use(express.json({ limit: '5mb', verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: false }));
@@ -1009,6 +1014,7 @@ app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html'))
 
 if (require.main === module) {
   initDb().then(async () => {
+    await initGoogleOAuthStore();
     if (pool) {
       let workflowTickRunning = false;
       const tick = async () => {
