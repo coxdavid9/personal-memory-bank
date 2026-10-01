@@ -307,7 +307,7 @@ function inferJob(message = '', hasFiles = false, recent = []) {
   if (/email.*calendar|calendar.*email/.test(text)) return 'communications';
   if (/email|mailbox|inbox|yahoo|gmail|unread|email search|email message/.test(text)) return 'email';
   if (/upcoming events|calendar events|what(?:'s| is) on my calendar|what do i have (?:scheduled|on my calendar)/.test(text)) return 'calendar_read';
-  if (/calendar|schedule|appointment|meeting|block time|reminder on my iphone/.test(text)) return 'calendar';
+  if (/calendar|calender|caledar|caleder|schedule|appointment|meeting|block time|reminder on my iphone/.test(text) || /\b(?:make|create|add|put)\b[\s\S]{0,80}\bevent\b/.test(text)) return 'calendar';
   if (/portfolio|401k|fidelity|voo|spaxx|holding|investment/.test(text)) return 'portfolio';
   if (/github|pull request|pr #|code|bug|deploy|render|repository|repo|test/.test(text)) return 'engineering';
   if (/customer|revenue|cost|business|sales|operations/.test(text)) return 'business';
