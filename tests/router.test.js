@@ -81,3 +81,5 @@ test('mobile shell prevents horizontal page overflow',()=>{
  assert.match(html,/overflow-wrap:anywhere/);
  assert.match(html,/\.composer input\{flex:1;min-width:0\}/);
 });
+
+test('work calendar questions route to live calendar reads',()=>{assert.equal(inferJob("what's on my work calendar today?",false,[]),'calendar_read');assert.equal(inferJob('whats on my work calendar today?',false,[]),'calendar_read');});
