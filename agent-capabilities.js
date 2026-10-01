@@ -4,7 +4,7 @@ const CAPABILITY_DEFINITIONS = [
   ['job-search', 'Job Search', 'Search and evaluate accounting/finance jobs using David’s saved preferences and application history.'],
   ['calendar', 'iPhone Calendar', 'Read upcoming iCloud calendar events and prepare calendar events for the iPhone.'],
   ['email', 'Email', 'Read personal Yahoo email and work Gmail when explicitly requested or when building the work radar.'],
-  ['portfolio', 'Portfolio', 'Track investment holdings, account values, allocation, and portfolio history.'],
+  ['portfolio', 'Market Sentinel', 'Monitor holdings and a stock/ETF watchlist, flag material moves, and support evidence-based investment research without placing trades.'],
   ['agent-team', 'AI Team', 'Private specialist agents for engineering, business operations, product, customer operations, and Chief of Staff work.'],
   ['excel', 'Excel', 'Analyze uploaded spreadsheets and generate Excel workbooks.'],
 ];
