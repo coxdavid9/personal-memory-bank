@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {extractFundamentals}=require('../sec-fundamentals');
+const fact=(v,tag)=>({units:{USD:[{val:v,fy:2025,fp:'FY',form:'10-K',filed:'2026-02-01',accn:tag}]}});
+test('extracts annual SEC fundamentals and calculates FCF inputs',()=>{const x=extractFundamentals({entityName:'Example',facts:{'us-gaap':{RevenueFromContractWithCustomerExcludingAssessedTax:fact(1000,'r'),NetIncomeLoss:fact(100,'n'),NetCashProvidedByUsedInOperatingActivities:fact(180,'o'),PaymentsToAcquirePropertyPlantAndEquipment:fact(50,'c'),Assets:fact(2000,'a'),Liabilities:fact(900,'l'),StockholdersEquity:fact(1100,'e')}}});assert.equal(x.revenue.value,1000);assert.equal(x.freeCashFlow,130);assert.equal(x.equity.value,1100);});
