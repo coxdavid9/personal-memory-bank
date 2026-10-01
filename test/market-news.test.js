@@ -1,0 +1,2 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {parseYahooRss}=require('../market-news');
+test('parses Yahoo Finance RSS evidence',()=>{const x=parseYahooRss('<rss><channel><item><title><![CDATA[Apple raises guidance]]></title><link>https://example.com/a</link><pubDate>Thu, 01 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>');assert.equal(x.length,1);assert.equal(x[0].title,'Apple raises guidance');});
