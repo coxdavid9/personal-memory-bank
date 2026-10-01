@@ -97,7 +97,7 @@ main{max-width:1180px}
     <div><h2>Talk to your agent</h2><div class="muted">Ask questions, work through ideas, or tell me what you want to get done.</div></div>
   </div>
   <div id="messages" class="messages"></div>
-  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" aria-label="Attach" title="Attach" onclick="document.getElementById('imageFile').click()">📎</button><input id="message" class="input" placeholder="Tell me what you're thinking..." onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
+  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" aria-label="Attach" title="Attach" onclick="document.getElementById('imageFile').click()">📎</button><input id="message" class="input" type="text" placeholder="Tell me what you're thinking..." autocorrect="on" autocapitalize="sentences" spellcheck="true" autocomplete="on" enterkeyhint="send" onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
 </section>
 </div>
 </main>
