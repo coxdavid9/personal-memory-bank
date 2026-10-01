@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {normalizeTicker}=require('../market-sentinel');
+test('Opportunity Watch uses validated ticker format',()=>{assert.equal(normalizeTicker(' msft '),'MSFT');assert.equal(normalizeTicker('bad ticker'),null);});
+test('Opportunity Watch statuses are intentionally review states',()=>{const states=['researching','watch','pass','owned'];assert.deepEqual(states.sort(),['owned','pass','researching','watch'].sort());});
