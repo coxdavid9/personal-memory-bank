@@ -105,6 +105,7 @@ main{max-width:1180px}
   <aside class="drawer-panel">
     <div class="drawer-head"><h2>Agent details</h2><button class="btn secondary" onclick="toggleDrawer(false)">Close</button></div>
     <div class="drawer-section"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
+    <div class="drawer-section"><h3>Connections</h3><section class="card"><div id="gmailConnection" class="muted">Checking work Gmail…</div></section></div>
     <div class="drawer-section"><h3>Capabilities</h3><section class="card"><div id="caps" class="muted">Loading...</div></section></div>
     <div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div>
     <div class="drawer-section"><h3>Memory</h3><section class="card"><div id="memories" class="muted">Loading...</div></section></div>
@@ -246,7 +247,9 @@ async function removeHolding(id){
     renderPortfolio(p);
   }catch(e){alert(e.message||'Unable to remove holding.')}
 }
+async function loadGmailConnection(){try{const s=await api('/api/google/oauth/status');const el=document.getElementById('gmailConnection');if(!el)return;if(s.connected){el.innerHTML='<strong>Work Gmail</strong><br><span class="badge">Connected · read only</span>';}else if(s.configured){el.innerHTML='<strong>Work Gmail</strong><br><span class="muted">'+esc(s.account||'Google Workspace')+'</span><br><a class="btn small" style="display:inline-block;text-decoration:none;margin-top:9px" href="/api/google/oauth/start">Connect Google</a>';}else{el.innerHTML='<strong>Work Gmail</strong><br><span class="muted">OAuth setup needs Google client credentials in Render.</span>';}}catch(e){}}
 async function refreshAgentDetails(){
+  loadGmailConnection();
   const [ctx, projectData]=await Promise.all([
     api('/api/agent/context'),
     api('/api/projects')
