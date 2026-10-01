@@ -1,0 +1,4 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {annualSeries,cagr,extractTrends}=require('../sec-fundamentals');
+const rows=(vals)=>({units:{USD:vals.map(([fy,val])=>({val,fy,fp:'FY',form:'10-K',filed:(fy+1)+'-02-01',accn:String(fy)}))}});
+test('builds annual history and CAGR from SEC facts',()=>{const f={'us-gaap':{RevenueFromContractWithCustomerExcludingAssessedTax:rows([[2022,100],[2023,110],[2024,121],[2025,133.1]])}};const s=annualSeries(f,['RevenueFromContractWithCustomerExcludingAssessedTax']);assert.deepEqual(s.map(x=>x.fy),[2022,2023,2024,2025]);assert.ok(Math.abs(cagr(s)-10)<0.01);});
+test('trend extraction keeps annual evidence',()=>{const d={facts:{'us-gaap':{RevenueFromContractWithCustomerExcludingAssessedTax:rows([[2024,100],[2025,120]]),NetIncomeLoss:rows([[2024,10],[2025,12]])}}};const x=extractTrends(d);assert.equal(x.revenue.length,2);assert.equal(Math.round(x.revenueCagrPct),20);});
