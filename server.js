@@ -9,6 +9,7 @@ const { CAPABILITY_DEFINITIONS } = require('./agent-capabilities');
 const { buildCalDAVClientFromEnv } = require('./caldav');
 const { buildEmailClientsFromEnv, isActionableEmail } = require('./email');
 const { buildGoogleOAuthFromEnv } = require('./google-oauth');
+const { GoogleCalendarClient } = require('./google-calendar');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
@@ -35,6 +36,7 @@ const authSecret = process.env.PERSONAL_AGENT_SESSION_SECRET || '';
 const caldav = buildCalDAVClientFromEnv();
 const googleOAuth = buildGoogleOAuthFromEnv();
 const emailClients = buildEmailClientsFromEnv(undefined,{googleOAuth:googleOAuth.isConfigured()?googleOAuth:null});
+const googleCalendar = new GoogleCalendarClient({getAccessToken:googleOAuth.isConfigured()?()=>googleOAuth.accessToken():null});
 const dailyPortfolioCronSecret = process.env.DAILY_PORTFOLIO_CRON_SECRET || '';
 const github = buildGitHubClientFromEnv();
 const renderOps = buildRenderClientFromEnv();
@@ -333,7 +335,7 @@ async function getAgentContext(db = pool, options = {}) {
     ? githubClient.getPriorityRadar().then(radar => ({ ...radar, items: buildGitHubPriorityItems(radar) })).catch(() => emptyGithub)
     : Promise.resolve(emptyGithub);
   const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.listUnread(10).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listUnread(10).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail])=>({yahoo:yahoo.filter(isActionableEmail).slice(0,5),gmail:gmail.filter(isActionableEmail).slice(0,5)})) : Promise.resolve({yahoo:[],gmail:[]});
-  const calendarPromise = includeRadar && caldav ? caldav.listUpcomingEvents({days:2}).catch(()=>[]) : Promise.resolve([]);
+  const calendarPromise = includeRadar ? Promise.all([caldav?caldav.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([]),googleOAuth.isConnected()?googleCalendar.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([])]).then(([personal,work])=>({personal,work})) : Promise.resolve({personal:[],work:[]});
 
   if (!db) {
     const [githubRadar,radarEmail,radarCalendar] = await Promise.all([githubPromise,emailPromise,calendarPromise]);
@@ -557,6 +559,7 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
     getWorkflows,
     deliverWorkflowMessage,
     caldav,
+    googleCalendar,
     emailClients,
     github,
     renderOps,
@@ -782,7 +785,7 @@ app.get('/api/team', async (req, res) => {
 
 app.get('/api/google/oauth/status',(req,res)=>res.json({configured:googleOAuth.isConfigured(),connected:googleOAuth.isConnected(),account:process.env.GOOGLE_IMAP_USER||null}));
 app.get('/api/google/oauth/start',(req,res)=>{try{res.redirect(googleOAuth.createAuthorizationUrl());}catch(err){res.status(503).json({error:err.message});}});
-app.get('/api/google/oauth/callback',async(req,res)=>{try{if(!googleOAuth.consumeState(req.query.state))return res.status(400).type('html').send('Invalid or expired Google OAuth state. Return to Jarvis and try again.');if(req.query.error)return res.status(400).type('html').send('Google authorization was not granted.');const tokens=await googleOAuth.exchangeCode(String(req.query.code||''));if(!tokens.refresh_token&&!googleOAuth.isConnected())return res.status(400).type('html').send('Google did not return offline access. Return to Jarvis and reconnect.');res.redirect('/?gmail=connected');}catch(err){console.error('Google OAuth callback failed:',err.message);res.status(400).type('html').send('Unable to connect work Gmail: '+String(err.message).replace(/[<>&]/g,''));}});
+app.get('/api/google/oauth/callback',async(req,res)=>{try{if(!googleOAuth.consumeState(req.query.state))return res.status(400).type('html').send('Invalid or expired Google OAuth state. Return to Jarvis and try again.');if(req.query.error)return res.status(400).type('html').send('Google authorization was not granted.');const tokens=await googleOAuth.exchangeCode(String(req.query.code||''));if(!tokens.refresh_token&&!googleOAuth.isConnected())return res.status(400).type('html').send('Google did not return offline access. Return to Jarvis and reconnect.');res.redirect('/?google=connected');}catch(err){console.error('Google OAuth callback failed:',err.message);res.status(400).type('html').send('Unable to connect work Gmail: '+String(err.message).replace(/[<>&]/g,''));}});
 
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
