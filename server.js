@@ -13,6 +13,7 @@ const { GoogleCalendarClient } = require('./google-calendar');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { initMarketSentinelDb, listWatchlist, addWatch, removeWatch, getMarketSentinelState } = require('./market-sentinel');
+const { initOpportunityWatchDb, listOpportunities, addOpportunity, updateOpportunity, researchOpportunity } = require('./opportunity-watch');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
@@ -170,6 +171,7 @@ async function initDb() {
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
   await initMarketSentinelDb(pool);
+  await initOpportunityWatchDb(pool);
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
@@ -745,6 +747,11 @@ app.post('/api/internal/daily-portfolio', async (req, res) => {
     res.status(500).json({ error: err.message || 'Daily portfolio agent failed.' });
   }
 });
+
+app.get('/api/opportunity-watch',async(req,res)=>{try{res.json({opportunities:await listOpportunities(pool)});}catch(err){res.status(500).json({error:err.message});}});
+app.post('/api/opportunity-watch',async(req,res)=>{try{const r=await addOpportunity(pool,req.body||{});res.status(r.ok?201:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
+app.patch('/api/opportunity-watch/:ticker',async(req,res)=>{try{const r=await updateOpportunity(pool,req.params.ticker,req.body||{});res.status(r.ok?200:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
+app.post('/api/opportunity-watch/:ticker/research',async(req,res)=>{try{const r=await researchOpportunity(pool,req.params.ticker);res.status(r.ok?200:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
 
 app.get('/api/market-sentinel', async (req,res)=>{try{res.json(await getMarketSentinelState(pool));}catch(err){res.status(500).json({error:err.message||'Unable to load Market Sentinel.'});}});
 app.post('/api/market-sentinel/watchlist', async (req,res)=>{try{const r=await addWatch(pool,req.body||{});res.status(r.ok?200:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
