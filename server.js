@@ -14,6 +14,7 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, dele
 const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
 const { initMarketSentinelDb, listWatchlist, addWatch, removeWatch, getMarketSentinelState } = require('./market-sentinel');
 const { initOpportunityWatchDb, listOpportunities, addOpportunity, updateOpportunity, researchOpportunity } = require('./opportunity-watch');
+const { initMarketLearningDb, listMarketLearning, recordMarketLearning } = require('./market-learning');
 const { getTeamRoles, initAgentTeamDb, getRecentTeamTasks, delegateToTeam } = require('./agent-team');
 const { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool } = require('./engineering');
 const { buildRenderClientFromEnv, renderToolDefinitions, executeRenderTool } = require('./render-ops');
@@ -172,6 +173,7 @@ async function initDb() {
   await initPortfolioAgentDb(pool);
   await initMarketSentinelDb(pool);
   await initOpportunityWatchDb(pool);
+await initMarketLearningDb(pool);
   await initAgentTeamDb(pool);
   await initJobSearchDb(pool);
   await initPolicyDb(pool);
@@ -748,6 +750,8 @@ app.post('/api/internal/daily-portfolio', async (req, res) => {
   }
 });
 
+app.get('/api/market-learning',async(req,res)=>{try{res.json({topics:await listMarketLearning(pool)});}catch(err){res.status(500).json({error:err.message});}});
+app.post('/api/market-learning',async(req,res)=>{try{const topic=await recordMarketLearning(pool,req.body?.topic);res.status(topic?201:400).json(topic?{ok:true,topic}:{ok:false,error:'Topic is required.'});}catch(err){res.status(500).json({error:err.message});}});
 app.get('/api/opportunity-watch',async(req,res)=>{try{res.json({opportunities:await listOpportunities(pool)});}catch(err){res.status(500).json({error:err.message});}});
 app.post('/api/opportunity-watch',async(req,res)=>{try{const r=await addOpportunity(pool,req.body||{});res.status(r.ok?201:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
 app.patch('/api/opportunity-watch/:ticker',async(req,res)=>{try{const r=await updateOpportunity(pool,req.params.ticker,req.body||{});res.status(r.ok?200:400).json(r);}catch(err){res.status(500).json({error:err.message});}});
