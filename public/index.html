@@ -81,6 +81,7 @@ main{max-width:1180px}
 @keyframes reactorSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes reactorPulse{0%,100%{box-shadow:0 0 0 4px rgba(56,225,255,.07),0 0 22px rgba(56,225,255,.34)}50%{box-shadow:0 0 0 5px rgba(56,225,255,.10),0 0 34px rgba(56,225,255,.58)}}@keyframes reactorDrift{0%,100%{transform:translate3d(0,0,0) scale(1.03)}50%{transform:translate3d(12px,-8px,0) scale(1.08)}}
 .working .orb img{animation:reactorSpin 16s linear infinite}.working .orb{animation:reactorPulse 2.8s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){.working .orb img,.working .orb,.working .chat::before{animation:none!important}}
+.nav-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:18px}.nav-card,.prompt-card{width:100%;text-align:left;border:1px solid var(--border);background:rgba(56,225,255,.035);color:var(--text);border-radius:16px;padding:16px;cursor:pointer;font-family:inherit;box-shadow:none}.nav-card:hover,.prompt-card:hover{background:rgba(56,225,255,.08);border-color:rgba(56,225,255,.42)}.nav-card strong,.prompt-card strong{display:block;color:var(--cyan);font-size:15px;margin-bottom:5px}.nav-card span,.prompt-card span{display:block;color:var(--muted);font-size:12.5px;line-height:1.4}.market-nav{background:linear-gradient(135deg,rgba(56,225,255,.10),rgba(56,225,255,.025))}.drawer-view.hidden{display:none}.back-link{border:0;background:transparent;color:var(--cyan);padding:4px 0 14px;cursor:pointer;font-weight:700}.market-hero{border-bottom:1px solid var(--border);padding:4px 2px 16px;margin-bottom:14px}.market-hero h3{font-size:22px;margin:5px 0 7px}.market-hero p{color:var(--muted);font-size:13px;line-height:1.5;margin:0}.eyebrow{font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;color:var(--cyan)}.prompt-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.prompt-card{min-height:104px;padding:13px}.market-portfolio{margin-top:18px}@media(max-width:520px){.prompt-grid{grid-template-columns:1fr}.prompt-card{min-height:auto}.drawer-panel{width:100vw}}
 </style>
 </head>
 <body id="app">
@@ -103,12 +104,31 @@ main{max-width:1180px}
 </main>
 <div id="drawer" class="drawer hidden" onclick="if(event.target===this)toggleDrawer(false)">
   <aside class="drawer-panel">
-    <div class="drawer-head"><h2>Agent details</h2><button class="btn secondary" onclick="toggleDrawer(false)">Close</button></div>
-    <div class="drawer-section"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
-    <div class="drawer-section"><h3>Connections</h3><section class="card"><div id="gmailConnection" class="muted">Checking work Gmail…</div></section></div>
-    <div class="drawer-section"><h3>Capabilities</h3><section class="card"><div id="caps" class="muted">Loading...</div></section></div>
-    <div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div>
-    <div class="drawer-section"><h3>Memory</h3><section class="card"><div id="memories" class="muted">Loading...</div></section></div>
+    <div class="drawer-head"><div><h2 id="drawerTitle">Jarvis</h2><div id="drawerSubtitle" class="muted">Choose where you want to go.</div></div><button class="btn secondary" onclick="toggleDrawer(false)">Close</button></div>
+    <div id="drawerHome" class="nav-grid">
+      <button class="nav-card market-nav" onclick="openSection('market')"><strong>Market</strong><span>Learn, research stocks, and review opportunities.</span></button>
+      <button class="nav-card" onclick="openSection('projects')"><strong>Projects</strong><span>ClearCFO, Job Search, and active work.</span></button>
+      <button class="nav-card" onclick="openSection('connections')"><strong>Connections</strong><span>Email, calendars, and connected services.</span></button>
+      <button class="nav-card" onclick="openSection('memory')"><strong>Memory</strong><span>Review what Jarvis is keeping available.</span></button>
+      <button class="nav-card" onclick="openSection('settings')"><strong>Settings</strong><span>Capabilities, permissions, and controls.</span></button>
+    </div>
+    <div id="sectionMarket" class="drawer-view hidden">
+      <button class="back-link" onclick="openSection('home')">← Back</button>
+      <div class="market-hero"><div class="eyebrow">MARKET</div><h3>Learn while you research.</h3><p>Pick a starting point. Jarvis will do the research and explain what the numbers mean.</p></div>
+      <div class="prompt-grid">
+        <button class="prompt-card" onclick="marketPrompt('What should I know about the market and my watchlist today? Explain why anything important matters.')"><strong>Today</strong><span>What actually matters right now?</span></button>
+        <button class="prompt-card" onclick="marketPrompt('I want to research a stock. Ask me for the ticker, then walk me through the company, fundamentals, valuation, risks, and what I should learn from it.')"><strong>Research a stock</strong><span>Start a guided company review.</span></button>
+        <button class="prompt-card" onclick="marketPrompt('Help me compare two stocks. Ask me for the tickers and explain the important differences in plain English.')"><strong>Compare stocks</strong><span>Understand two companies side by side.</span></button>
+        <button class="prompt-card" onclick="marketPrompt('Teach me one stock-market concept that would be useful for me to understand next. Use a practical example and keep it beginner friendly.')"><strong>Teach me</strong><span>Learn one useful concept at a time.</span></button>
+        <button class="prompt-card" onclick="marketPrompt('Show me my Opportunity Watch and explain what each status means and what I could research next.')"><strong>Opportunity Watch</strong><span>Review stocks under consideration.</span></button>
+        <button class="prompt-card" onclick="marketPrompt('Based on what Market Sentinel and Opportunity Watch can currently do, give me 4 useful questions I could ask you next and explain why each question is useful.')"><strong>What should I ask?</strong><span>Get ideas when you don't know where to start.</span></button>
+      </div>
+      <div class="drawer-section market-portfolio"><h3>Portfolio</h3><section class="card"><div id="portfolio" class="muted">Loading...</div></section></div>
+    </div>
+    <div id="sectionProjects" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div></div>
+    <div id="sectionConnections" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Connections</h3><section class="card"><div id="gmailConnection" class="muted">Checking connections…</div></section></div></div>
+    <div id="sectionMemory" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Memory</h3><section class="card"><div id="memories" class="muted">Loading...</div></section></div></div>
+    <div id="sectionSettings" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Capabilities</h3><p class="muted">These are Jarvis's underlying tools. You normally won't need to change them.</p><section class="card"><div id="caps" class="muted">Loading...</div></section></div></div>
   </aside>
 </div>
 <script>
@@ -307,7 +327,9 @@ async function logout(){try{await api("/api/auth/logout",{method:"POST"});}final
 function setWorking(active){document.getElementById('app')?.classList.toggle('working',active);const status=document.getElementById('statusLine');if(status)status.textContent=active?'Working':'Ready'}
 async function send(){if(sendInFlight)return;const input=document.getElementById('message'),text=input.value.trim();const image=selectedImageDataUrl;if(!text&&!image)return;sendInFlight=true;setWorking(true);messages.push({role:'user',content:text||'Please analyze this image.',image,id:-Date.now()});input.value='';clearImage();renderMessages(true);try{const data=await api('/api/agent/chat',{method:'POST',body:JSON.stringify({message:text,imageDataUrl:image})});messages.push({role:'assistant',content:data.reply,actions:data.actions||[],id:-Date.now()-1});renderMessages(true);await loadApprovals().catch(()=>{});renderMessages(true);await syncChat()}catch(e){messages.push({role:'assistant',content:'I hit an error: '+e.message,id:-Date.now()-1});renderMessages(true)}finally{sendInFlight=false;setWorking(false)}}
 function quick(text){document.getElementById('message').value=text;send()}
-function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open)}
+function openSection(name='home'){const map={market:['Market','Learn, research, and understand your investments.'],projects:['Projects','Your active work.'],connections:['Connections','Services Jarvis can read or use.'],memory:['Memory','Information available to Jarvis.'],settings:['Settings','Capabilities and controls.'],home:['Jarvis','Choose where you want to go.']};document.getElementById('drawerHome').style.display=name==='home'?'grid':'none';document.querySelectorAll('.drawer-view').forEach(el=>el.classList.add('hidden'));if(name!=='home'){const el=document.getElementById('section'+name.charAt(0).toUpperCase()+name.slice(1));if(el)el.classList.remove('hidden')}const meta=map[name]||map.home;document.getElementById('drawerTitle').textContent=meta[0];document.getElementById('drawerSubtitle').textContent=meta[1];}
+function marketPrompt(text){toggleDrawer(false);document.getElementById('message').value=text;send()}
+function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open);if(open)openSection('home')}
 
 load();
 chatSyncTimer=setInterval(syncChat,3000);
