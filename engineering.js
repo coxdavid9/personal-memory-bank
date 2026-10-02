@@ -1,5 +1,21 @@
 const GITHUB_API = 'https://api.github.com';
 
+function parseProjectStatus(content='') {
+  const text=String(content||'');
+  const sections={};
+  const re=/^##\s+(.+)\s*$\n([\s\S]*?)(?=^##\s+|\s*$)/gm;
+  let m; while((m=re.exec(text))) sections[m[1].trim().toLowerCase()]=m[2].trim();
+  const clean=v=>String(v||'').replace(/\*\*/g,'').replace(/^[-*]\s+/gm,'').trim();
+  const lines=v=>clean(v).split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const currentState=clean(sections['current state']||'');
+  const open=sections['open work / next milestones']||sections['open work']||'';
+  const next=sections['next milestone']||sections['next steps']||'';
+  const blockers=sections['blockers']||'';
+  const nextActions=[...lines(next),...lines(open)].filter((x,i,a)=>a.indexOf(x)===i).slice(0,5);
+  return { currentState, openWork:lines(open).slice(0,8), blockers:lines(blockers).slice(0,5), nextActions };
+}
+
+
 function buildGitHubClientFromEnv(fetchImpl = fetch) {
   const token = process.env.GITHUB_TOKEN || '';
   const repo = process.env.GITHUB_REPO || 'coxdavid9/personal-memory-bank';
@@ -149,13 +165,15 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
         for (const path of ['PROJECT_STATUS.md','STATUS.md','README.md']) {
           try { const file = await getFile(path, defaultBranch, repository); if (file?.content) { projectDoc={path,content:file.content.slice(0,12000)}; break; } } catch {}
         }
+        const structuredStatus = parseProjectStatus(projectDoc?.content || '');
         states.push({
           repository, description: info.description || '', defaultBranch,
           recentlyCompleted: merged.slice(0,8).map(pr=>({number:pr.number,title:pr.title,mergedAt:pr.merged_at})),
           openPullRequests: openPrs.slice(0,8).map(pr=>({number:pr.number,title:pr.title,updatedAt:pr.updated_at})),
           openIssues: issues.filter(x=>!x.pull_request&&x.user?.type!=='Bot').slice(0,10).map(x=>({number:x.number,title:x.title,updatedAt:x.updated_at})),
           mainStatus: summarizeCi(checks),
-          projectDoc,
+          health: summarizeCi(checks)==='failing'?'blocked':(openPrs.length?'active':'ready'),
+          projectDoc, projectState: structuredStatus,
           verifiedAt: new Date().toISOString()
         });
       } catch (err) { states.push({repository,error:err.message,verifiedAt:new Date().toISOString()}); }
@@ -330,4 +348,4 @@ async function executeEngineeringTool(name, args, client) {
   return { ok: false, error: `Unknown engineering tool: ${name}` };
 }
 
-module.exports = { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool };
+module.exports = { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool, parseProjectStatus };
