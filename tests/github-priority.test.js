@@ -52,7 +52,7 @@ test('empty GitHub radar contributes nothing', async () => {
     includeGithub: true,
     githubClient: { getPriorityRadar: async () => ({ repos: [] }) }
   });
-  assert.deepEqual(context.priorityContext.github, { repos: [], items: [] });
+  assert.deepEqual(context.priorityContext.github, { repos: [], items: [], projects: [] });
 });
 
 test('non-priority questions make no GitHub API calls', async () => {
