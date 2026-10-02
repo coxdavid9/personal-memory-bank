@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getAgentContext, isWorkPriorityQuestion, buildGitHubPriorityItems } = require('../server');
+const { getAgentContext, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems } = require('../server');
 
 test('work-priority detection is narrow', () => {
   assert.equal(isWorkPriorityQuestion('What should I work on right now?'), true);
@@ -87,4 +87,19 @@ test('attention context exposes market and approval signal buckets when radar is
   const context = await getAgentContext(null, { includeGithub: true, githubClient: { getPriorityRadar: async () => ({ repos: [] }) } });
   assert.ok(context.priorityContext.market);
   assert.ok(Array.isArray(context.priorityContext.approvals));
+});
+
+
+test('attention output is structurally capped at three main items', () => {
+  const input = 'For tomorrow:\n\n1. First\nDetails one.\n\n2. Second\nDetails two.\n\n3. Third\nDetails three.\n\n4. Routine calendar item\nShould not survive.\n\nEverything else: Useful lower-priority context.';
+  const output = enforceAttentionLimit(input, 3);
+  assert.match(output, /1\. First/);
+  assert.match(output, /3\. Third/);
+  assert.doesNotMatch(output, /4\. Routine calendar item/);
+  assert.doesNotMatch(output, /Should not survive/);
+  assert.match(output, /Everything else: Useful lower-priority context/);
+});
+
+test('attention cap leaves ordinary non-numbered replies unchanged', () => {
+  assert.equal(enforceAttentionLimit('Nothing urgent today.', 3), 'Nothing urgent today.');
 });
