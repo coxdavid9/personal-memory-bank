@@ -271,6 +271,7 @@ const connectionTestTool = {
 };
 
 const JOB_SKILLS = Object.freeze({
+  attention: ['test_connections','save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read','get_calendar_events','get_job_application_history','get_portfolio_summary','get_workflows','delegate_to_team'],
   general: ['test_connections','save_memory','get_personal_context','get_portfolio_summary','delegate_to_team','get_workflows'],
   email: ['test_connections','save_memory','get_personal_context','email_list_unread','email_search','email_read','gmail_list_unread','gmail_search','gmail_read'],
   calendar_read: ['test_connections','save_memory','get_personal_context','get_calendar_events'],
@@ -287,6 +288,7 @@ const JOB_SKILLS = Object.freeze({
 function inferJob(message = '', hasFiles = false, recent = []) {
   const text = String(message).toLowerCase();
   if (hasFiles) return 'excel_analysis';
+  if (/what should i (?:be )?(?:work(?:ing)? on|do|tackle|focus on|handle)|what do i need to (?:do|work on|tackle|focus on|know)|what needs (?:doing|to be done)|what(?:'s| is) next(?: up)?|what are my (?:top )?priorit(?:y|ies)|not just jobs,? everything/.test(text)) return 'attention';
   // Keep calendar clarification answers in the active task, before keyword routing.
   // Only the immediately preceding exchange counts; explicit new requests win.
   const history = Array.isArray(recent) ? recent : [];
