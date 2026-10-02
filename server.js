@@ -357,9 +357,9 @@ async function getAgentContext(db = pool, options = {}) {
   const includeGithub = Boolean(options.includeGithub);
   const includeRadar = options.includeRadar === undefined ? includeGithub : Boolean(options.includeRadar);
   const githubClient = options.githubClient === undefined ? github : options.githubClient;
-  const emptyGithub = { repos: [], items: [] };
+  const emptyGithub = { repos: [], items: [], projects: [] };
   const githubPromise = includeGithub && githubClient?.getPriorityRadar
-    ? githubClient.getPriorityRadar().then(radar => ({ ...radar, items: buildGitHubPriorityItems(radar) })).catch(() => emptyGithub)
+    ? Promise.all([githubClient.getPriorityRadar(), githubClient.getProjectIntelligence ? githubClient.getProjectIntelligence() : Promise.resolve([])]).then(([radar,projects]) => ({ ...radar, items: buildGitHubPriorityItems(radar), projects })).catch(() => emptyGithub)
     : Promise.resolve(emptyGithub);
   const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.yahoo.isConfigured()?emailClients.yahoo.listSent(50).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listSent(50).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail,yahooSent,gmailSent])=>{const cutoff=Date.now()-(36*60*60*1000);const recent=(items,sent)=>annotateConversationState(items.filter(m=>!m.date||new Date(m.date).getTime()>=cutoff).filter(isActionableEmail),sent).slice(0,8);return {yahoo:recent(yahoo,yahooSent),gmail:recent(gmail,gmailSent)};}) : Promise.resolve({yahoo:[],gmail:[]});
   const calendarPromise = includeRadar ? Promise.all([caldav?caldav.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([]),googleOAuth.isConnected()?googleCalendar.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([])]).then(([personal,work])=>({personal,work})) : Promise.resolve({personal:[],work:[]});
@@ -457,6 +457,9 @@ ${JSON.stringify(context.priorityContext?.github || { repos: [], items: [] }, nu
 ${JSON.stringify(context.priorityContext?.email || { yahoo: [], gmail: [] }, null, 2)}
 - Live priority calendars (personal + work Google Calendar; populated only for priority/briefing questions):
 ${JSON.stringify(context.priorityContext?.calendar || { personal: [], work: [] }, null, 2)}
+- GitHub Project Intelligence (verified repo state for productive-work fallback):
+${JSON.stringify(context.priorityContext?.github?.projects || [], null, 2)}
+- When the structured Attention candidate list is empty and David asks what to work on, use GitHub Project Intelligence as the productive-work fallback. Prefer a concrete open PR/issue, failing main check, or explicit next/open item in the project status document. Recent merged PRs are completed evidence, not unfinished work. Do not invent missing milestones. Choose up to 3 useful project steps across ClearCFO, CMA-Agent, and Jarvis; explain why each is the next useful step. If repo evidence does not establish unfinished work, say that project needs a status/checklist update rather than guessing.
 - Structured Attention candidates (eligible main items for priority/briefing questions):
 ${JSON.stringify(context.priorityContext?.candidates || [], null, 2)}
 - Live pending approvals (populated only for priority/briefing questions):
