@@ -1,0 +1,4 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {annotateConversationState,normalizeSubject}=require('../email');
+test('subject normalization joins reply threads',()=>assert.equal(normalizeSubject('Re: Fwd: Colson Next Steps'),'colson next steps'));
+test('later sent reply marks incoming email waiting on them',()=>{const incoming=[{subject:'Colson Next Steps',date:'2026-10-02T10:00:00Z'}],sent=[{subject:'Re: Colson Next Steps',date:'2026-10-02T11:00:00Z'}];const r=annotateConversationState(incoming,sent);assert.equal(r[0].conversationState,'waiting_on_them');assert.equal(r[0].repliedAt,'2026-10-02T11:00:00Z');});
+test('incoming without later reply remains waiting on David',()=>{const r=annotateConversationState([{subject:'Question',date:'2026-10-02T10:00:00Z'}],[{subject:'Re: Question',date:'2026-10-02T09:00:00Z'}]);assert.equal(r[0].conversationState,'waiting_on_you');});
