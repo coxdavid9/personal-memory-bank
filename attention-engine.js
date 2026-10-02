@@ -1,5 +1,6 @@
 
 function projectNextAction(project){
+ const structured=project?.projectState?.nextActions||[]; if(structured.length)return structured[0];
  const doc=project?.projectDoc?.content||'';
  if(!doc)return null;
  const heading=/^##\s+(Next milestone|Open work \/ next milestones|Open work|Next steps)\s*$([\s\S]*?)(?=^##\s+|$(?![\s\S]))/im;
