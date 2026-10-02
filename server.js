@@ -289,6 +289,24 @@ function isWorkPriorityQuestion(message = '') {
   ].some(pattern => pattern.test(text));
 }
 
+function enforceAttentionLimit(text, maxItems = 3) {
+  const source = String(text || '');
+  const lines = source.split('\n');
+  let numbered = 0;
+  let dropping = false;
+  const kept = [];
+  for (const line of lines) {
+    const match = line.match(/^\s*(\d+)\.\s+/);
+    if (match) {
+      numbered += 1;
+      dropping = numbered > maxItems;
+    }
+    if (/^\s*Everything else\s*:/i.test(line)) dropping = false;
+    if (!dropping) kept.push(line);
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function buildGitHubPriorityItems(radar = { repos: [] }) {
   const items = [];
   for (const repo of radar.repos || []) {
@@ -963,7 +981,9 @@ app.post('/api/agent/chat', async (req, res) => {
       await pool.query('INSERT INTO agent_messages(role,content) VALUES($1,$2)', ['user', message || (rawFileIds.length ? '[Excel files attached]' : '[Image attached]')]);
       await pool.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)', ['assistant', result.text, JSON.stringify(result.actions || [])]);
     }
-    res.json({ reply: result.text, actions: result.actions || [] });
+    const reply = isWorkPriorityQuestion(message) ? enforceAttentionLimit(result.text, 3) : result.text;
+    if (pool && reply !== result.text) await pool.query('UPDATE agent_messages SET content=$1 WHERE id=(SELECT id FROM agent_messages WHERE role=\'assistant\' ORDER BY created_at DESC LIMIT 1)', [reply]);
+    res.json({ reply, actions: result.actions || [] });
   } catch (err) { console.error(err); res.status(500).json({ error: err.message || 'Unable to run agent.' }); }
 });
 
@@ -1068,4 +1088,4 @@ if (require.main === module) {
   }).catch(err => { console.error('Database initialization failed:', err); process.exit(1); });
 }
 
-module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
+module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
