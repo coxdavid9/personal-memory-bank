@@ -268,5 +268,6 @@ module.exports = { PORTFOLIO_NOTIFICATION_SUBJECT,
   fallbackNotification,
   composeNotification,
   sendNotification,
-  runDailyPortfolioAgent
+  runDailyPortfolioAgent,
+  sendNotification
 };

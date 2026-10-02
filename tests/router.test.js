@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { inferJob, buildAgentTools } = require('../agent-tools');
 
 test('router sends calendar requests to calendar skills only', () => {
@@ -83,3 +85,6 @@ test('mobile shell prevents horizontal page overflow',()=>{
 });
 
 test('work calendar questions route to live calendar reads',()=>{assert.equal(inferJob("what's on my work calendar today?",false,[]),'calendar_read');assert.equal(inferJob('whats on my work calendar today?',false,[]),'calendar_read');});
+
+
+test('mobile composer is viewport-bounded without centered transform drift',()=>{const html=fs.readFileSync(path.join(__dirname,'..','public','index.html'),'utf8');assert.match(html,/@media\(max-width:800px\)\{\.composer\{left:10px;right:10px;transform:none;width:auto/);});
