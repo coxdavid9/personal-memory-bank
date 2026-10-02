@@ -11,7 +11,8 @@ const { buildEmailClientsFromEnv, isActionableEmail } = require('./email');
 const { buildGoogleOAuthFromEnv } = require('./google-oauth');
 const { GoogleCalendarClient } = require('./google-calendar');
 const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, deleteManualHoldings, buildPortfolioContext, isStalePortfolioGuidance } = require('./portfolio');
-const { initPortfolioAgentDb, runDailyPortfolioAgent } = require('./portfolio-agent');
+const { initPortfolioAgentDb, runDailyPortfolioAgent, sendNotification } = require('./portfolio-agent');
+const { initProactiveDb, runProactiveCheck } = require('./proactive-agent');
 const { initMarketSentinelDb, listWatchlist, addWatch, removeWatch, getMarketSentinelState } = require('./market-sentinel');
 const { initOpportunityWatchDb, listOpportunities, addOpportunity, updateOpportunity, researchOpportunity } = require('./opportunity-watch');
 const { initMarketLearningDb, listMarketLearning, recordMarketLearning } = require('./market-learning');
@@ -172,6 +173,7 @@ async function initDb() {
   await initPortfolioDb(pool);
   await initPortfolioAgentDb(pool);
   await initMarketSentinelDb(pool);
+  await initProactiveDb(pool);
   await initOpportunityWatchDb(pool);
 await initMarketLearningDb(pool);
   await initAgentTeamDb(pool);
@@ -775,6 +777,17 @@ app.post('/api/internal/daily-portfolio', async (req, res) => {
     console.error('Daily portfolio agent failed:', err);
     res.status(500).json({ error: err.message || 'Daily portfolio agent failed.' });
   }
+});
+
+
+app.post('/api/internal/proactive-check', async (req,res)=>{
+  if(!dailyPortfolioCronSecret)return res.status(503).json({error:'Proactive scheduler is not configured.'});
+  const supplied=String(req.get('x-daily-portfolio-secret')||'');const a=Buffer.from(supplied),b=Buffer.from(dailyPortfolioCronSecret);
+  if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.status(401).json({error:'Unauthorized.'});
+  try{
+    const result=await runProactiveCheck({pool,getContext:()=>getAgentContext(pool,{includeGithub:true}),notify:sendNotification});
+    res.json({ok:true,decision:result.notify?'notify':'silent',reason:result.reason,count:result.signals.length});
+  }catch(err){console.error('Proactive check failed:',err);res.status(500).json({error:err.message||'Proactive check failed.'});}
 });
 
 app.get('/api/market-learning',async(req,res)=>{try{res.json({topics:await listMarketLearning(pool)});}catch(err){res.status(500).json({error:err.message});}});
