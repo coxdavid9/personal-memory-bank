@@ -52,7 +52,7 @@ test('empty GitHub radar contributes nothing', async () => {
     includeGithub: true,
     githubClient: { getPriorityRadar: async () => ({ repos: [] }) }
   });
-  assert.deepEqual(context.priorityContext.github, { repos: [], items: [] });
+  assert.deepEqual(context.priorityContext.github, { repos: [], items: [], projects: [] });
 });
 
 test('non-priority questions make no GitHub API calls', async () => {
@@ -106,3 +106,6 @@ test('attention cap leaves ordinary non-numbered replies unchanged', () => {
 
 
 test('server schedules Proactive Jarvis conservatively',()=>{const fs=require('node:fs'),path=require('node:path');const src=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');assert.match(src,/let proactiveTickRunning = false/);assert.match(src,/15 \* 60 \* 1000/);assert.match(src,/60 \* 1000/);assert.match(src,/if \(proactiveTickRunning\) return/);});
+
+
+test('priority context includes verified GitHub project intelligence',async()=>{const ctx=await getAgentContext(null,{includeGithub:true,githubClient:{getPriorityRadar:async()=>({repos:[]}),getProjectIntelligence:async()=>[{repository:'coxdavid9/CMA-Agent',mainStatus:'green',recentlyCompleted:[],openIssues:[{number:1,title:'Audit bank'}],verifiedAt:'2026-10-02T00:00:00Z'}]}});assert.equal(ctx.priorityContext.github.projects[0].repository,'coxdavid9/CMA-Agent');assert.equal(ctx.priorityContext.github.projects[0].openIssues[0].title,'Audit bank');});

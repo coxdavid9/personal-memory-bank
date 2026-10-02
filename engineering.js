@@ -3,7 +3,7 @@ const GITHUB_API = 'https://api.github.com';
 function buildGitHubClientFromEnv(fetchImpl = fetch) {
   const token = process.env.GITHUB_TOKEN || '';
   const repo = process.env.GITHUB_REPO || 'coxdavid9/personal-memory-bank';
-  const additionalRepos = String(process.env.GITHUB_ADDITIONAL_REPOS || 'coxdavid9/clearcfo')
+  const additionalRepos = String(process.env.GITHUB_ADDITIONAL_REPOS || 'coxdavid9/clearcfo,coxdavid9/CMA-Agent')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean);
@@ -136,6 +136,33 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
     return { repos: repoResults.filter(Boolean) };
   }
 
+
+  async function getProjectIntelligence() {
+    const states = [];
+    for (const repository of allowedRepos) {
+      try {
+        const info = await getRepo(repository), defaultBranch = info.default_branch || 'main';
+        const [merged, openPrs, issues, checks] = await Promise.all([
+          listRecentMergedPullRequests(repository), listOpenPullRequests(repository), listIssues('open', repository), listBranchCheckRuns(defaultBranch, repository)
+        ]);
+        let projectDoc = null;
+        for (const path of ['PROJECT_STATUS.md','STATUS.md','README.md']) {
+          try { const file = await getFile(path, defaultBranch, repository); if (file?.content) { projectDoc={path,content:file.content.slice(0,12000)}; break; } } catch {}
+        }
+        states.push({
+          repository, description: info.description || '', defaultBranch,
+          recentlyCompleted: merged.slice(0,8).map(pr=>({number:pr.number,title:pr.title,mergedAt:pr.merged_at})),
+          openPullRequests: openPrs.slice(0,8).map(pr=>({number:pr.number,title:pr.title,updatedAt:pr.updated_at})),
+          openIssues: issues.filter(x=>!x.pull_request&&x.user?.type!=='Bot').slice(0,10).map(x=>({number:x.number,title:x.title,updatedAt:x.updated_at})),
+          mainStatus: summarizeCi(checks),
+          projectDoc,
+          verifiedAt: new Date().toISOString()
+        });
+      } catch (err) { states.push({repository,error:err.message,verifiedAt:new Date().toISOString()}); }
+    }
+    return states;
+  }
+
   async function getFile(path, ref = 'main', requestedRepo) {
     const targetRepo = resolveRepo(requestedRepo);
     const data = await request(`/repos/${targetRepo}/contents/${path.replace(/^\/+/, '')}?ref=${encodeURIComponent(ref)}`);
@@ -205,7 +232,7 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
     return { pr, committed };
   }
 
-  return { repo, allowedRepos: [...allowedRepos], resolveRepo, getRepo, listOpenPullRequests, listRecentMergedPullRequests, getPullRequest, getPullRequestStatus, listIssues, getFile, createBranch, updateFile, createPullRequest, createPR };
+  return { repo, allowedRepos: [...allowedRepos], resolveRepo, getRepo, listOpenPullRequests, listRecentMergedPullRequests, getPullRequest, getPullRequestStatus, listIssues, getProjectIntelligence, getFile, createBranch, updateFile, createPullRequest, createPR };
 }
 
 function engineeringToolDefinitions({ render = false } = {}) {
