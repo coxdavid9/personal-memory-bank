@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { inferJob, buildAgentTools } = require('../agent-tools');
 
 test('router sends calendar requests to calendar skills only', () => {
