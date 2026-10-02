@@ -515,7 +515,7 @@ async function callSpecialist({ roleKey, system, user, runId, onAction }) {
   for (let turn = 0; turn < 6; turn += 1) {
     const body = { model: openAIModel, input };
     if (tools) { body.tools = tools; body.tool_choice = 'auto'; }
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    let response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify(body)
@@ -659,6 +659,10 @@ async function runAgent(message, imageDataUrl = null, fileIds = []) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({ model: openAIModel, input: responseInput, tools, tool_choice: 'auto' }),
     });
+    if (response.status >= 500) {
+      await new Promise(resolve => setTimeout(resolve, 750));
+      response = await fetch('https://api.openai.com/v1/responses', { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.OPENAI_API_KEY}`}, body:JSON.stringify({model:openAIModel,input:responseInput,tools,tool_choice:'auto'}) });
+    }
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error?.message || 'The AI agent request failed.');
