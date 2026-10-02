@@ -88,3 +88,6 @@ test('work calendar questions route to live calendar reads',()=>{assert.equal(in
 
 
 test('mobile composer is viewport-bounded without centered transform drift',()=>{const html=fs.readFileSync(path.join(__dirname,'..','public','index.html'),'utf8');assert.match(html,/@media\(max-width:800px\)\{\.composer\{left:10px;right:10px;transform:none;width:auto/);});
+
+
+test('priority questions use the full attention route instead of job search',()=>{assert.equal(inferJob('What should I be working on right now?'),'attention');assert.equal(inferJob('What do I need to know today?'),'attention');assert.equal(inferJob('not just jobs, everything'),'attention');const names=buildAgentTools({job:'attention'}).map(x=>x.name);for(const name of ['email_search','gmail_search','get_calendar_events','get_job_application_history','get_portfolio_summary','get_workflows'])assert.ok(names.includes(name),name);});
