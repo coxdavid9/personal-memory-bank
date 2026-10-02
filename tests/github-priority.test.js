@@ -103,3 +103,6 @@ test('attention output is structurally capped at three main items', () => {
 test('attention cap leaves ordinary non-numbered replies unchanged', () => {
   assert.equal(enforceAttentionLimit('Nothing urgent today.', 3), 'Nothing urgent today.');
 });
+
+
+test('server schedules Proactive Jarvis conservatively',()=>{const fs=require('node:fs'),path=require('node:path');const src=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');assert.match(src,/let proactiveTickRunning = false/);assert.match(src,/15 \* 60 \* 1000/);assert.match(src,/60 \* 1000/);assert.match(src,/if \(proactiveTickRunning\) return/);});

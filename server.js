@@ -1094,6 +1094,28 @@ if (require.main === module) {
       };
       await tick();
       setInterval(tick, 30 * 1000).unref();
+
+      // Proactive Jarvis shares this service's existing connections/secrets.
+      // Start after a short warm-up, run every 15 minutes, and never overlap runs.
+      let proactiveTickRunning = false;
+      const proactiveTick = async () => {
+        if (proactiveTickRunning) return;
+        proactiveTickRunning = true;
+        try {
+          const result = await runProactiveCheck({
+            pool,
+            getContext: () => getAgentContext(pool, { includeGithub: true }),
+            notify: sendNotification
+          });
+          if (result.notify) console.log(`Proactive Jarvis notified: ${result.reason} (${result.signals.length} signal(s))`);
+        } catch (err) { console.error('Proactive Jarvis tick failed:', err.message); }
+        finally { proactiveTickRunning = false; }
+      };
+      const proactiveStartup = setTimeout(() => {
+        proactiveTick();
+        setInterval(proactiveTick, 15 * 60 * 1000).unref();
+      }, 60 * 1000);
+      proactiveStartup.unref();
     }
     if (pool) setInterval(() => purgeExpiredExcelFiles(pool).catch(err => console.error('Excel purge failed:', err)), 24 * 60 * 60 * 1000);
     if (caldav) await caldav.discover();
