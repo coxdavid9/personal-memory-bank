@@ -1,3 +1,14 @@
+
+function projectNextAction(project){
+ const doc=project?.projectDoc?.content||'';
+ if(!doc)return null;
+ const heading=/^##\s+(Next milestone|Open work \/ next milestones|Open work|Next steps)\s*$([\s\S]*?)(?=^##\s+|$(?![\s\S]))/im;
+ const m=doc.match(heading);if(!m)return null;
+ const body=m[2].trim();
+ const bold=body.match(/\*\*([^*]+)\*\*/);if(bold)return bold[1].trim();
+ const bullet=body.match(/^[-*]\s+(.+)$/m);if(bullet)return bullet[1].replace(/\*\*/g,'').trim();
+ const sentence=body.replace(/\s+/g,' ').split(/(?<=[.!?])\s+/)[0];return sentence?sentence.replace(/\*\*/g,'').trim():null;
+}
 function genericCalendarTitle(title){return /^(busy|focus|hold|office)$/i.test(String(title||'').trim());}
 function buildAttentionCandidates(priorityContext={},now=new Date()){
  const out=[],nowMs=now.getTime();
@@ -7,9 +18,10 @@ function buildAttentionCandidates(priorityContext={},now=new Date()){
  for(const e of events){const mins=(e._s-nowMs)/60000;if(mins>=0&&mins<=120&&!genericCalendarTitle(e.title))out.push({domain:'calendar',score:85,text:`Prepare for ${e.title}`,why:`It starts in about ${Math.max(1,Math.round(mins))} minutes.`});}
  for(const source of ['yahoo','gmail'])for(const e of priorityContext.email?.[source]||[]){if(e.conversationState==='waiting_on_them')continue;const txt=`${e.subject||''} ${e.snippet||''}`;const urgent=/fraud|unauthori[sz]ed|security alert|payment failed|account locked|action required|urgent/i.test(txt);out.push({domain:'email',score:urgent?92:72,text:`Review ${e.subject||'recent email'}`,why:urgent?'The message appears to require prompt action.':'You have not sent a later reply in this conversation.'});}
  for(const x of priorityContext.github?.items||[])out.push({domain:'github',score:/failing/i.test(x.text||'')?88:68,text:x.text,why:'Live GitHub radar surfaced this work.'});
+ for(const p of priorityContext.github?.projects||[]){const next=projectNextAction(p);if(next)out.push({domain:'project',score:55,text:next,why:'Verified next milestone from '+p.repository+' '+(p.projectDoc?.path||'project status')+'.'});}
  for(const x of priorityContext.market?.material||[])out.push({domain:'market',score:70,text:`Review material Market change for ${x.ticker||'watchlist'}`,why:x.summary||x.driver||'Market Sentinel marked the change material.'});
  for(const m of priorityContext.memories||[]){if(m.due&&new Date(m.due).getTime()<=nowMs+24*3600000)out.push({domain:'memory',score:m.priority==='High'?82:65,text:m.text,why:'A saved action is due within 24 hours.'});}
  // Saved job leads are reference state, not automatically urgent work. Only explicit due/workflow state should promote them.
  const seen=new Set();return out.sort((a,b)=>b.score-a.score).filter(x=>{const k=x.domain+'|'+x.text.toLowerCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
 }
-module.exports={buildAttentionCandidates,genericCalendarTitle};
+module.exports={buildAttentionCandidates,genericCalendarTitle,projectNextAction};
