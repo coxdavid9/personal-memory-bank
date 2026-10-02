@@ -109,3 +109,6 @@ test('server schedules Proactive Jarvis conservatively',()=>{const fs=require('n
 
 
 test('priority context includes verified GitHub project intelligence',async()=>{const ctx=await getAgentContext(null,{includeGithub:true,githubClient:{getPriorityRadar:async()=>({repos:[]}),getProjectIntelligence:async()=>[{repository:'coxdavid9/CMA-Agent',mainStatus:'green',recentlyCompleted:[],openIssues:[{number:1,title:'Audit bank'}],verifiedAt:'2026-10-02T00:00:00Z'}]}});assert.equal(ctx.priorityContext.github.projects[0].repository,'coxdavid9/CMA-Agent');assert.equal(ctx.priorityContext.github.projects[0].openIssues[0].title,'Audit bank');});
+
+
+test('real GitHub client exports radar and project intelligence methods',()=>{const old=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='test-token';delete require.cache[require.resolve('../engineering')];const {buildGitHubClientFromEnv}=require('../engineering');const client=buildGitHubClientFromEnv(async()=>{throw new Error('network not expected')});assert.equal(typeof client.getPriorityRadar,'function');assert.equal(typeof client.getProjectIntelligence,'function');assert.ok(client.allowedRepos.includes('coxdavid9/clearcfo'));assert.ok(client.allowedRepos.includes('coxdavid9/CMA-Agent'));if(old===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=old;});

@@ -232,7 +232,7 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
     return { pr, committed };
   }
 
-  return { repo, allowedRepos: [...allowedRepos], resolveRepo, getRepo, listOpenPullRequests, listRecentMergedPullRequests, getPullRequest, getPullRequestStatus, listIssues, getProjectIntelligence, getFile, createBranch, updateFile, createPullRequest, createPR };
+  return { repo, allowedRepos: [...allowedRepos], resolveRepo, getRepo, listOpenPullRequests, listRecentMergedPullRequests, getPullRequest, getPullRequestStatus, listIssues, getPriorityRadar, getProjectIntelligence, getFile, createBranch, updateFile, createPullRequest, createPR };
 }
 
 function engineeringToolDefinitions({ render = false } = {}) {
