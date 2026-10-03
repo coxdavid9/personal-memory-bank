@@ -2,6 +2,7 @@ const TIERS = Object.freeze({ SAFE: 'safe', MONITOR: 'monitor', ASK: 'ask', BLOC
 
 const DEFAULT_POLICIES = Object.freeze({
   save_memory: TIERS.MONITOR,
+  attention_decision: TIERS.MONITOR,
   get_personal_context: TIERS.SAFE,
   get_portfolio_summary: TIERS.SAFE,
   record_holding: TIERS.MONITOR,
@@ -191,3 +192,4 @@ function cryptoRandomId() {
 }
 
 module.exports = { TIERS, DEFAULT_POLICIES, classifySkill, initPolicyDb, loadWhitelist, summarizeArgs, auditToolCall, requestApproval, getApproval, decideApproval, executeSkill };
+

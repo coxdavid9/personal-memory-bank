@@ -34,6 +34,8 @@ function collectProactiveSignals(context, now=new Date()){
   const emails=[...(context?.priorityContext?.email?.yahoo||[]),...(context?.priorityContext?.email?.gmail||[])];
   for(const e of emails){
     if(e.conversationState==='waiting_on_them') continue;
+    const candidates=context?.priorityContext?.candidates;
+    if(candidates&&!candidates.some(c=>c.domain==='email'&&c.text===`Review ${e.subject||'recent email'}`))continue;
     const text=`${e.subject||''} ${e.snippet||''}`;
     if(/fraud|unauthori[sz]ed|confirm this purchase|payment failed|account locked|security alert/i.test(text))
       signals.push({kind:'email',priority:95,title:e.subject||'Important email',detail:'A recent message appears to require prompt verification or action.'});
@@ -57,3 +59,4 @@ async function runProactiveCheck({pool,getContext,notify,now=new Date()}){
   return {notify:true,reason:'new_material_attention',signals};
 }
 module.exports={initProactiveDb,collectProactiveSignals,runProactiveCheck,signalKey};
+
