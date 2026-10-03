@@ -137,7 +137,7 @@ function buildGitHubClientFromEnv(fetchImpl = fetch) {
         const openIssues = issues
           .filter(issue => !issue.pull_request && issue.user?.type !== 'Bot')
           .slice(0, 5)
-          .map(issue => ({ number: issue.number, title: issue.title, htmlUrl: issue.html_url }));
+          .map(issue => ({ number: issue.number, title: issue.title, updatedAt:issue.updated_at, htmlUrl: issue.html_url }));
         return {
           repository,
           defaultBranch,
@@ -349,3 +349,4 @@ async function executeEngineeringTool(name, args, client) {
 }
 
 module.exports = { buildGitHubClientFromEnv, engineeringToolDefinitions, executeEngineeringTool, parseProjectStatus };
+

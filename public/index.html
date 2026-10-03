@@ -37,7 +37,7 @@ main{max-width:1180px;margin:0 auto;padding:18px}
 .action-card{margin:8px 0;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#fff}.action-card strong{display:block;margin-bottom:5px}.action-card .btn{margin-top:8px}
 .approval-actions{display:flex;gap:7px;margin-top:9px}.approval-actions .btn{flex:1}.approval-preview{white-space:pre-wrap;overflow:auto;max-height:280px;background:#f8f9fb;border:1px solid #e4e7ec;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
 .image-preview{display:none;align-items:center;gap:8px;padding:7px 0;width:100%}.image-preview img{width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #d0d5dd}.image-preview .muted{font-size:12px;flex:1}
-.composer{box-sizing:border-box;position:fixed;left:50%;right:auto;bottom:0;flex-wrap:wrap;transform:translateX(-50%);width:min(calc(100vw - 20px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1;min-width:0}.composer>*{max-width:100%}
+.composer{box-sizing:border-box;position:fixed;left:50%;right:auto;bottom:0;flex-wrap:wrap;transform:translateX(-50%);width:min(calc(100vw - 20px),1144px);display:flex;gap:8px;margin:0;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:rgba(7,13,20,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:15}.composer input{flex:1;min-width:0}.composer>*{max-width:100%}
 .input,select,button{font:inherit}.input{width:100%;padding:15px 18px;border:1.5px solid #e2e5ef;border-radius:16px;background:#fafbfe;font-size:14.5px}.input:focus{outline:none;border-color:#38e1ff;background:#fff;box-shadow:0 0 0 4px #38e1ff26}
 .btn{border:0;border-radius:14px;padding:11px 18px;font-weight:800;cursor:pointer;background:linear-gradient(120deg,#38e1ff,#0c91ad);color:#fff;box-shadow:0 8px 20px #38e1ff59;font-family:inherit}.btn:hover{filter:brightness(1.07)}
 .btn.secondary{background:#eef2f6;color:#172033}.btn.small{padding:8px 11px;font-size:12px}
@@ -83,6 +83,7 @@ main{max-width:1180px}
 @media(prefers-reduced-motion:reduce){.working .orb img,.working .orb,.working .chat::before{animation:none!important}}
 .nav-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:18px}.nav-card,.prompt-card{width:100%;text-align:left;border:1px solid var(--border);background:rgba(56,225,255,.035);color:var(--text);border-radius:16px;padding:16px;cursor:pointer;font-family:inherit;box-shadow:none}.nav-card:hover,.prompt-card:hover{background:rgba(56,225,255,.08);border-color:rgba(56,225,255,.42)}.nav-card strong,.prompt-card strong{display:block;color:var(--cyan);font-size:15px;margin-bottom:5px}.nav-card span,.prompt-card span{display:block;color:var(--muted);font-size:12.5px;line-height:1.4}.market-nav{background:linear-gradient(135deg,rgba(56,225,255,.10),rgba(56,225,255,.025))}.drawer-view.hidden{display:none}.back-link{border:0;background:transparent;color:var(--cyan);padding:4px 0 14px;cursor:pointer;font-weight:700}.market-hero{border-bottom:1px solid var(--border);padding:4px 2px 16px;margin-bottom:14px}.market-hero h3{font-size:22px;margin:5px 0 7px}.market-hero p{color:var(--muted);font-size:13px;line-height:1.5;margin:0}.eyebrow{font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;color:var(--cyan)}.prompt-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.prompt-card{min-height:104px;padding:13px}.market-portfolio{margin-top:18px}@media(max-width:520px){.prompt-grid{grid-template-columns:1fr}.prompt-card{min-height:auto}.drawer-panel{width:100vw}}
 .bubble h3{font-size:16px;margin:15px 0 8px}.bubble h4{font-size:14px;margin:13px 0 7px}.followups{display:flex;flex-direction:column;gap:7px;margin-top:12px;max-width:100%}.followup-btn{display:block;width:100%;max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:left;border:1px solid var(--border);background:rgba(56,225,255,.045);color:var(--cyan);border-radius:10px;padding:9px 11px;font:600 12px inherit;cursor:pointer}.followup-btn:hover{background:rgba(56,225,255,.1)}.learning-list{margin-top:12px}.learning-item{font-size:12px;color:var(--muted);padding:7px 0;border-bottom:1px solid var(--border)}
+.attention-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:16px 0 10px}.attention-head h2{margin:0;font-size:18px}.attention-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.attention-card{border:1px solid var(--border);border-radius:16px;padding:16px;background:rgba(10,20,29,.9);overflow-wrap:anywhere}.attention-card h3{font-size:16px;line-height:1.4;margin:8px 0;color:var(--cyan)}.attention-card p{font-size:13px;line-height:1.5}.attention-card summary{color:var(--muted);font-size:12px;cursor:pointer}.attention-controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.attention-controls .btn{font-size:11px;padding:10px;text-decoration:none}.attention-state{color:var(--muted);font-size:12px;margin-top:10px}.attention-card.handled{opacity:.65}.view-tabs{display:flex;gap:8px;margin:14px 0}.view-tabs [aria-pressed="true"]{border-color:var(--cyan);background:rgba(56,225,255,.18)}.attention-status{font-size:12px;color:var(--muted);margin-bottom:10px}@media(max-width:800px){.attention-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body id="app">
@@ -93,7 +94,9 @@ main{max-width:1180px}
   <div class="top-actions"><button class="ghost-btn" onclick="toggleDrawer(true)">☰ More</button><button class="ghost-btn" onclick="logout()">Sign out</button></div>
 </header>
 <section id="approvalBar" class="approval-bar" style="display:none"><div id="approvals"></div></section>
-<div class="grid">
+<nav class="view-tabs" aria-label="Jarvis view"><button id="todayTab" class="btn secondary" aria-pressed="false" onclick="showJarvisView('today')">Today</button><button id="chatTab" class="btn secondary" aria-pressed="true" onclick="showJarvisView('chat')">Chat</button></nav>
+<section id="todayView" hidden><div class="attention-head"><h2>Your next actions</h2><button id="attentionRefresh" class="btn secondary" onclick="loadAttention()">Refresh</button></div><div id="attentionStatus" class="attention-status" role="status"></div><div id="attentionItems" class="attention-grid"></div></section>
+<div id="chatView" class="grid">
 <section class="card chat">
   <div class="chat-head">
     <div><h2>Talk to your agent</h2><div class="muted">Ask questions, work through ideas, or tell me what you want to get done.</div></div>
@@ -205,8 +208,29 @@ function clearImage(){selectedImageDataUrl=null;const input=document.getElementB
 async function copyMessage(index){const textToCopy=visibleContent(messages[index]?.content||'');try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
 function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
 function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
+let attentionItems=[],attentionStates=new Map(),attentionLoaded=false,attentionStateChecked=0,attentionBusy=false;
+function attentionIsVisible(item){const state=attentionStates.get(item.id);return !state||state.status==='active'||(state.status==='snoozed'&&new Date(state.snoozed_until).getTime()<=Date.now());}
+function attentionCardHtml(item){
+ const visible=attentionIsVisible(item),state=attentionStates.get(item.id),id=/^[a-f0-9]{64}$/.test(item.id||'')?item.id:'';
+ let open='';
+ if(item.domain==='email')open=`<button class="btn secondary" onclick="openAttention('${id}')">Read email</button>`;
+ else if(/^https:\/\//.test(item.url||''))open=`<a class="btn secondary" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">Open source</a>`;
+ else if(item.domain==='approval')open='<button class="btn secondary" onclick="showJarvisView(\'chat\');loadApprovals()">Review approval</button>';
+ else open=`<button class="btn secondary" onclick="openAttention('${id}')">Work on this</button>`;
+ const label=visible?'':state?.status==='handled'?'Handled':'Snoozed until '+new Date(state?.snoozed_until).toLocaleString();
+ return `<article class="attention-card ${visible?'':'handled'}"><span class="badge">${esc(item.domain)}</span><h3>${esc(item.text)}</h3><details><summary>Why this surfaced</summary><p>${esc(item.why)}</p>${item.evidence?'<p class="muted">'+esc(item.evidence)+'</p>':''}</details><div class="attention-controls">${open}${visible?`<button class="btn" onclick="decideAttentionItem('${id}','handled',this)">Mark handled</button><button class="btn secondary" onclick="decideAttentionItem('${id}','snoozed',this)">Snooze 24h</button>`:`<button class="btn secondary" onclick="decideAttentionItem('${id}','active',this)">Undo</button>`}</div>${label?'<div class="attention-state">'+esc(label)+'</div>':''}</article>`;
+}
+function renderAttention(){const visible=attentionItems.filter(attentionIsVisible);const hidden=attentionItems.filter(x=>!attentionIsVisible(x));document.getElementById('attentionItems').innerHTML=(visible.length?visible.map(attentionCardHtml).join(''):'<p class="muted">No current actions surfaced from the connected sources.</p>')+(hidden.length?'<details><summary>Handled or snoozed ('+hidden.length+')</summary>'+hidden.map(attentionCardHtml).join('')+'</details>':'');}
+async function loadAttentionState(){const data=await api('/api/attention/state');attentionStates=new Map((data.states||[]).map(x=>[x.id,x]));attentionStateChecked=Date.now();renderAttention();renderMessages();}
+async function loadAttention(){if(attentionBusy)return;attentionBusy=true;const status=document.getElementById('attentionStatus'),button=document.getElementById('attentionRefresh');button.disabled=true;status.textContent='Checking connected sources…';try{const data=await api('/api/attention');attentionItems=data.items||[];await loadAttentionState();attentionLoaded=true;status.textContent='Checked '+new Date(data.checkedAt).toLocaleTimeString();}catch(e){status.textContent=e.message;}finally{button.disabled=false;attentionBusy=false;}}
+function showJarvisView(view){const today=view==='today';document.getElementById('todayView').hidden=!today;document.getElementById('chatView').style.display=today?'none':'';document.getElementById('todayTab').setAttribute('aria-pressed',String(today));document.getElementById('chatTab').setAttribute('aria-pressed',String(!today));if(today&&!attentionLoaded)loadAttention();}
+function findAttention(id){return attentionItems.find(x=>x.id===id)||messages.flatMap(m=>m.actions||[]).find(x=>x.type==='attention.item'&&x.id===id);}
+function openAttention(id){const item=findAttention(id);if(!item)return;showJarvisView('chat');document.getElementById('message').value=item.domain==='email'?`Read my ${item.source==='yahoo'?'Yahoo':'work Gmail'} email with message id ${item.uid}. Tell me what it asks and whether it still needs a response.`:`Help me with this action: ${item.text}. Verify the current source before proposing changes.`;send();}
+async function decideAttentionItem(id,status,button){button.disabled=true;try{const data=await api('/api/attention/'+id+'/decision',{method:'POST',body:JSON.stringify({status,hours:24})});if(data.approvalRequired||data.ok===false)throw new Error('The decision was not saved.');attentionStates.set(id,{id,status,snoozed_until:data.snoozedUntil});renderAttention();renderMessages();}catch(e){alert(e.message);}finally{button.disabled=false;}}
+
 function actionHtml(action){
  if(!action)return '';
+ if(action.type==='attention.item')return attentionCardHtml(action);
  if(action.type==='calendar.create_event')return calendarActionHtml(action);
  if(action.type==='tool.approval'){
   const preview=action.preview?.diff?`<details style="margin-top:10px"><summary>View proposed change</summary><pre class="approval-preview">${esc(action.preview.diff)}</pre></details>`:''; 
@@ -304,6 +328,7 @@ async function syncChat(){
  if(chatSyncBusy)return;
  chatSyncBusy=true;
  try{
+   if(Date.now()-attentionStateChecked>=15000)await loadAttentionState().catch(()=>{});
    const history=await api('/api/agent/messages');
    const serverMessages=history.messages||[];
    const serverKeys=new Set(serverMessages.map(m=>String(m.role)+'::'+String(m.content||'')));
@@ -326,7 +351,8 @@ async function load(){
    api('/api/portfolio').then(renderPortfolio).catch(e=>setError('portfolio',e)),
    refreshAgentDetails().catch(e=>{setError('caps',e);setError('projects',e);setError('memories',e)}),
    api('/api/agent/messages').then(history=>{messages=history.messages||[];renderMessages(true)}).catch(e=>{messages=[];renderMessages();document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="muted">Unable to load chat history: '+esc(e.message)+'</div>')}),
-   loadApprovals().catch(e=>setError('approvals',e))
+   loadApprovals().catch(e=>setError('approvals',e)),
+   loadAttentionState().catch(()=>{})
  ]);
 }
 async function logout(){try{await api("/api/auth/logout",{method:"POST"});}finally{location.href="/login"}}
@@ -344,3 +370,4 @@ chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 <script src="/excel-ui.js"></script></body></html>
+

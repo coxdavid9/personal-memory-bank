@@ -14,6 +14,7 @@ const { initPortfolioDb, recordHolding, getPortfolioSummary, deleteHolding, dele
 const { initPortfolioAgentDb, runDailyPortfolioAgent, sendNotification } = require('./portfolio-agent');
 const { initProactiveDb, runProactiveCheck } = require('./proactive-agent');
 const { buildAttentionCandidates } = require('./attention-engine');
+const { initAttentionDb, prepareAttention, decideAttention } = require('./attention-state');
 const { initMarketSentinelDb, listWatchlist, addWatch, removeWatch, getMarketSentinelState } = require('./market-sentinel');
 const { initOpportunityWatchDb, listOpportunities, addOpportunity, updateOpportunity, researchOpportunity } = require('./opportunity-watch');
 const { initMarketLearningDb, listMarketLearning, recordMarketLearning } = require('./market-learning');
@@ -175,6 +176,7 @@ async function initDb() {
   await initPortfolioAgentDb(pool);
   await initMarketSentinelDb(pool);
   await initProactiveDb(pool);
+  await initAttentionDb(pool);
   await initOpportunityWatchDb(pool);
 await initMarketLearningDb(pool);
   await initAgentTeamDb(pool);
@@ -317,6 +319,7 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
       if (pr.ciStatus === 'green' && pr.mergeable !== false) {
         items.push({
           kind: 'pull_request',
+          ...(pr.headSha?{revision:pr.headSha+':'+pr.ciStatus}:{}),
           repository: repo.repository,
           number: pr.number,
           title: pr.title,
@@ -325,6 +328,7 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
       } else if (pr.ciStatus === 'failing') {
         items.push({
           kind: 'pull_request',
+          ...(pr.headSha?{revision:pr.headSha+':'+pr.ciStatus}:{}),
           repository: repo.repository,
           number: pr.number,
           title: pr.title,
@@ -335,6 +339,7 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
     for (const check of repo.failingMainChecks || []) {
       items.push({
         kind: 'main_check',
+        ...(check.htmlUrl?{revision:check.htmlUrl}:{}),
         repository: repo.repository,
         check: check.name,
         text: `main is failing on ${check.name}`
@@ -343,6 +348,7 @@ function buildGitHubPriorityItems(radar = { repos: [] }) {
     for (const issue of repo.openIssues || []) {
       items.push({
         kind: 'issue',
+        ...(issue.updatedAt?{revision:issue.updatedAt}:{}),
         repository: repo.repository,
         number: issue.number,
         title: issue.title,
@@ -361,7 +367,7 @@ async function getAgentContext(db = pool, options = {}) {
   const githubPromise = includeGithub && githubClient?.getPriorityRadar
     ? Promise.all([githubClient.getPriorityRadar(), githubClient.getProjectIntelligence ? githubClient.getProjectIntelligence() : Promise.resolve([])]).then(([radar,projects]) => ({ ...radar, items: buildGitHubPriorityItems(radar), projects })).catch(() => emptyGithub)
     : Promise.resolve(emptyGithub);
-  const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.yahoo.isConfigured()?emailClients.yahoo.listSent(50).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listSent(50).catch(()=>[]):Promise.resolve([])]).then(([yahoo,gmail,yahooSent,gmailSent])=>{const cutoff=Date.now()-(36*60*60*1000);const recent=(items,sent)=>annotateConversationState(items.filter(m=>!m.date||new Date(m.date).getTime()>=cutoff).filter(isActionableEmail),sent).slice(0,8);return {yahoo:recent(yahoo,yahooSent),gmail:recent(gmail,gmailSent)};}) : Promise.resolve({yahoo:[],gmail:[]});
+  const emailPromise = includeRadar ? Promise.all([emailClients.yahoo.isConfigured()?emailClients.yahoo.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.search({limit:25}).catch(()=>[]):Promise.resolve([]),emailClients.yahoo.isConfigured()?emailClients.yahoo.listSent(50).catch(()=>null):Promise.resolve([]),emailClients.gmail.isConfigured()?emailClients.gmail.listSent(50).catch(()=>null):Promise.resolve([])]).then(([yahoo,gmail,yahooSent,gmailSent])=>{const cutoff=Date.now()-(36*60*60*1000);const recent=(items,sent)=>annotateConversationState(items.filter(m=>!m.date||new Date(m.date).getTime()>=cutoff).filter(isActionableEmail),sent||[],{sentVerified:sent!==null}).slice(0,8);return {yahoo:recent(yahoo,yahooSent),gmail:recent(gmail,gmailSent)};}) : Promise.resolve({yahoo:[],gmail:[]});
   const calendarPromise = includeRadar ? Promise.all([caldav?caldav.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([]),googleOAuth.isConnected()?googleCalendar.listUpcomingEvents({days:2}).catch(()=>[]):Promise.resolve([])]).then(([personal,work])=>({personal,work})) : Promise.resolve({personal:[],work:[]});
   const marketPromise = includeRadar ? getMarketSentinelState(db).catch(()=>({watchlist:[],material:[],investigations:[]})) : Promise.resolve({watchlist:[],material:[],investigations:[]});
   const approvalsPromise = includeRadar && db ? db.query(`SELECT id, created_at AS "createdAt", expires_at AS "expiresAt", skill, args FROM tool_approvals WHERE status='pending' AND expires_at > NOW() ORDER BY created_at ASC LIMIT 10`).then(r=>r.rows).catch(()=>[]) : Promise.resolve([]);
@@ -373,7 +379,7 @@ async function getAgentContext(db = pool, options = {}) {
       projects: [],
       capabilities: [],
       portfolioState: { manualCount: 0, plaidCount: 0 },
-      priorityContext: { memories: [], jobs: [], github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals, candidates: buildAttentionCandidates({memories:[],jobs:[],github:githubRadar,email:radarEmail,calendar:radarCalendar,market:radarMarket,approvals:radarApprovals}) }
+      priorityContext: { memories: [], jobs: [], github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals, candidates: await prepareAttention(null,buildAttentionCandidates({memories:[],jobs:[],github:githubRadar,email:radarEmail,calendar:radarCalendar,market:radarMarket,approvals:radarApprovals})) }
     };
   }
 
@@ -408,7 +414,7 @@ async function getAgentContext(db = pool, options = {}) {
     capabilities: capabilities.rows,
     portfolioState,
     portfolioGuidance: portfolioState.guidance,
-    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals, candidates: buildAttentionCandidates({memories:actionableMemories,jobs:jobs.rows,github:githubRadar,email:radarEmail,calendar:radarCalendar,market:radarMarket,approvals:radarApprovals}) }
+    priorityContext: { memories: actionableMemories, jobs: jobs.rows, github: githubRadar, email: radarEmail, calendar: radarCalendar, market: radarMarket, approvals: radarApprovals, candidates: await prepareAttention(db, buildAttentionCandidates({memories:actionableMemories,jobs:jobs.rows,github:githubRadar,email:radarEmail,calendar:radarCalendar,market:radarMarket,approvals:radarApprovals})) }
   };
 }
 
@@ -626,8 +632,12 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
 
 async function runAgent(message, imageDataUrl = null, fileIds = []) {
   const actions = [];
-  if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const context = await getAgentContext(pool, { includeGithub: isWorkPriorityQuestion(message) });
+  if(isWorkPriorityQuestion(message)&&!imageDataUrl&&!fileIds.length){
+    const items=context.priorityContext.candidates.slice(0,3);
+    return {text:items.length?'Here are your next actions. Open a card, mark it handled, or snooze it.':'No current actions surfaced from the connected sources.',actions:items.map(item=>({type:'attention.item',...item}))};
+  }
+  if (!hasOpenAI) throw new Error('OPENAI_API_KEY is not configured on the server yet.');
   const ids = [...new Set((Array.isArray(fileIds) ? fileIds : []).map(Number).filter(id => Number.isInteger(id)))];
   if (ids.length > MAX_FILES_PER_MESSAGE) throw new Error('You can attach up to 5 Excel/CSV files per message.');
   const excelFiles = [];
@@ -982,6 +992,22 @@ app.get('/api/files/:id/download', async (req, res) => {
   } catch(err) { console.error('Excel download failed:',err); res.status(500).json({error:'Unable to download the workbook.'}); }
 });
 
+app.get('/api/attention', async (req,res) => {
+  if(!pool)return res.status(503).json({error:'Persistent storage is required for interactive priorities.'});
+  try{const context=await getAgentContext(pool,{includeGithub:true});res.json({items:context.priorityContext.candidates.slice(0,3),checkedAt:new Date().toISOString()});}
+  catch(e){res.status(500).json({error:'Unable to refresh attention items.'});}
+});
+app.get('/api/attention/state', async (req,res) => {
+  if(!pool)return res.json({states:[]});
+  try{const {rows}=await pool.query("SELECT id,status,snoozed_until FROM attention_items WHERE status<>'active'");res.json({states:rows});}
+  catch(e){res.status(500).json({error:'Unable to load attention state.'});}
+});
+app.post('/api/attention/:id/decision', async (req,res) => {
+  if(!pool)return res.status(503).json({error:'Persistent storage is required.'});
+  try{const result=await executeSkill('attention_decision',req.body,{pool,execute:()=>decideAttention(pool,req.params.id,req.body.status,req.body.hours===undefined?24:Number(req.body.hours))});res.json(result);}
+  catch(e){res.status(400).json({error:e.message});}
+});
+
 app.get('/api/agent/messages', async (req, res) => {
   if (!pool) return res.json({ messages: [] });
   try {
@@ -1134,3 +1160,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
+
