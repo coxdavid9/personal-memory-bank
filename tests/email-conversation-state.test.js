@@ -11,3 +11,6 @@ test('a new incoming message after a reply becomes actionable again',()=>{
 });
 test('failed sent scan is unknown, not proof that no reply was sent',()=>assert.equal(annotateConversationState([{subject:'Question'}],[],{sentVerified:false})[0].conversationState,'unknown'));
 test('reply headers can match a changed subject',()=>assert.equal(annotateConversationState([{messageId:'<original>',subject:'Interview',date:'2026-10-02T10:00:00Z'}],[{inReplyTo:'<original>',subject:'Updated next step',date:'2026-10-02T11:00:00Z'}])[0].conversationState,'waiting_on_them'));
+test('routine account confirmations stay out of action feed, security failures remain',()=>{
+ const {isActionableEmail}=require('../email');assert.equal(isActionableEmail({subject:'Your trade confirmation',senderAddress:'service@fidelity.com'}),false);assert.equal(isActionableEmail({subject:'Payment failed — action required',senderAddress:'no-reply@bank.com'}),true);
+});
