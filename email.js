@@ -51,5 +51,17 @@ function annotateConversationState(incoming=[],sent=[],{sentVerified=true}={}) {
   return {...message,conversationState:reply?'waiting_on_them':sentVerified?'waiting_on_you':'unknown',repliedAt:reply?.date||null};
  });
 }
-function isActionableEmail(message={}){const sender=String(message.senderAddress||'').toLowerCase();const subject=String(message.subject||'').toLowerCase();if(/fraud|unauthori[sz]ed|security alert|payment failed|account locked|action required/.test(subject))return true;if(/deposit confirmation|trade[- ]confirmation|transaction confirmation|statement (is )?available|dividend payment/.test(subject))return false;if(/no[-_]?reply|donotreply|do[-_]?not[-_]?reply|mailer-daemon|newsletter|marketing|promo|digest|notifications?@|updates?@/.test(sender))return false;if(/unsubscribe|newsletter|weekly digest|daily digest|promotion|receipt|order confirmation|shipping update/.test(subject))return false;return true;}
+function isActionableEmail(message={}) {
+ const sender=String(message.senderAddress||'').toLowerCase();
+ const subject=String(message.subject||'').toLowerCase();
+ const text=subject+' '+String(message.snippet||'').toLowerCase();
+ // An explicit security problem or required setup step outranks routine-mail exclusions.
+ if(/fraud|unauthori[sz]ed|security alert|payment failed|account locked|action required/.test(text))return true;
+ if(/(?:verify|activate|confirm|complete|finish|reset) (?:your |the |this )?(?:email|account|registration|application|password)|please (?:reply|respond|confirm|complete)|required (?:forms|documents)|schedule (?:your |an |the )?interview/.test(text))return true;
+ // Receipt of an informational message is not a task just because no reply was sent.
+ if(/welcome to our family|welcome (?:to|aboard)|(?:successfully )?created (?:an? |your )?(?:online )?account|(?:online )?account (?:has been |was |successfully )?created|deposit confirmation|trade[- ]confirmation|transaction confirmation|statement (is )?available|dividend payment/.test(subject))return false;
+ if(/no[-_]?reply|donotreply|do[-_]?not[-_]?reply|mailer-daemon|newsletter|marketing|promo|digest|notifications?@|updates?@/.test(sender))return false;
+ if(/unsubscribe|newsletter|weekly digest|daily digest|promotion|receipt|order confirmation|shipping update/.test(subject))return false;
+ return true;
+}
 module.exports={EmailClient,GmailApiClient,buildEmailClientsFromEnv,isActionableEmail,annotateConversationState,normalizeSubject,findPlainTextPart,decodeText};
