@@ -73,7 +73,7 @@ test('Jarvis v3 UI wiring is present and purple legacy accents are gone', () => 
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(html, /JARVIS/);
   assert.match(html, /\/reactor\.jpg/);
-  assert.match(html, /setWorking\(active\)/);
+  assert.match(html, /function setWorking\(\)/);
   assert.match(html, /Working/);
   assert.match(html, /prefers-reduced-motion/);
   assert.doesNotMatch(html, /Personal Agent/);
