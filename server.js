@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
+const { JarvisPush } = require('./push-notifications');
+const { verifySchedulerToken } = require('./push-scheduler-auth');
 const multer = require('multer');
 const { buildAgentTools, executeAgentTool, inferJob, validateImageDataUrl } = require('./agent-tools');
 const { CAPABILITY_DEFINITIONS } = require('./agent-capabilities');
@@ -82,7 +84,7 @@ function authPage(message = '') {
 
 function requireAuth(req, res, next) {
   if (isAuthenticated(req)) return next();
-  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/api/webhooks/github' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
+  if (req.path === '/login' || req.path === '/api/auth/login' || req.path === '/api/status' || req.path === '/api/internal/daily-portfolio' || req.path === '/api/internal/push-reminders' || req.path === '/api/webhooks/github' || req.path === '/manifest.webmanifest' || req.path === '/sw.js' || req.path.startsWith('/icons/')) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
   return res.redirect('/login');
 }
@@ -92,6 +94,14 @@ const pool = hasDatabase
 function oauthCipherKey(){return crypto.createHash('sha256').update(authSecret).digest();}
 function encryptSecret(value){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',oauthCipherKey(),iv);const body=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),body].map(x=>x.toString('base64url')).join('.');}
 function decryptSecret(value){const [iv,tag,body]=String(value).split('.').map(x=>Buffer.from(x,'base64url'));const d=crypto.createDecipheriv('aes-256-gcm',oauthCipherKey(),iv);d.setAuthTag(tag);return Buffer.concat([d.update(body),d.final()]).toString('utf8');}
+const jarvisPush=new JarvisPush({pool,encrypt:encryptSecret,decrypt:decryptSecret});
+async function scheduleReminderPush(memory) {
+  if (!memory.due || memory.done || new Date(memory.due)<=new Date()) return false;
+  try {
+  const status=await jarvisPush.status();
+  return Boolean(status.available && status.devices>0 && status.lastTick && Date.now()-new Date(status.lastTick).getTime()<20*60*1000);
+  } catch {return false;}
+}
 async function initGoogleOAuthStore(){if(!pool||!authSecret)return;await pool.query('CREATE TABLE IF NOT EXISTS oauth_tokens(provider TEXT PRIMARY KEY, encrypted_refresh_token TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');const {rows}=await pool.query("SELECT encrypted_refresh_token FROM oauth_tokens WHERE provider='work_gmail'");if(rows[0])googleOAuth.refreshToken=decryptSecret(rows[0].encrypted_refresh_token);googleOAuth.onRefreshToken=async token=>{await pool.query("INSERT INTO oauth_tokens(provider,encrypted_refresh_token,updated_at) VALUES('work_gmail',$1,NOW()) ON CONFLICT(provider) DO UPDATE SET encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,updated_at=NOW()",[encryptSecret(token)]);};}
 
 
@@ -601,6 +611,7 @@ function buildToolDeps({ actions = [], runId = null, skipPolicy = false, overrid
     hasNtfyReminders,
     scheduleReminderEmail,
     scheduleReminderNtfy,
+    scheduleReminderPush,
     getAgentContext,
     recordHolding,
     deleteHolding,
@@ -872,6 +883,24 @@ app.get('/api/google/oauth/callback',async(req,res)=>{try{if(!googleOAuth.consum
 
 app.get('/api/status', (req, res) => res.json({ authenticated: isAuthenticated(req), authConfigured: Boolean(authPassword && authSecret), persistentStorage: hasDatabase, emailReminders: hasEmailReminders, ntfyReminders: hasNtfyReminders, aiAgent: hasOpenAI, clearCfoConnected: Boolean(clearCfoApiUrl), caldavConfigured: Boolean(caldav), caldavCalendar: caldav ? caldav.calendarName : null, model: openAIModel }));
 
+app.get('/api/push/config',async(req,res)=>{
+  try {res.setHeader('Cache-Control','no-store');res.json(await jarvisPush.status());}
+  catch {res.status(503).json({error:'Notifications are unavailable.'});}
+});
+app.post('/api/push/:operation',async(req,res)=>{
+  if (req.headers.origin && req.headers.origin!==new URL(appUrl).origin) return res.status(403).json({error:'Invalid request origin.'});
+  if (!jarvisPush.keys) return res.status(503).json({error:'Notifications are unavailable.'});
+  if (!['subscribe','unsubscribe','test'].includes(req.params.operation)) return res.status(404).json({error:'Unknown notification action.'});
+  try {res.json(await jarvisPush[req.params.operation](req.body.subscription));}
+  catch {res.status(400).json({error:'Notification setup or delivery failed. Check permission and try enabling this device again.'});}
+});
+app.post('/api/internal/push-reminders',async(req,res)=>{
+  const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  if (!await verifySchedulerToken(token)) return res.status(401).json({error:'Unauthorized scheduler.'});
+  try {const result=await jarvisPush.processDue();res.status(result.failed?503:200).json({ok:!result.failed,...result});}
+  catch {res.status(503).json({error:'Reminder delivery could not complete.'});}
+});
+
 app.get('/api/agent/context', async (req, res) => {
   try { res.json(await getAgentContext()); } catch (err) { console.error(err); res.status(500).json({ error: 'Unable to load agent context.' }); }
 });
@@ -1093,6 +1122,7 @@ app.post('/api/memories', async (req, res) => {
     if (!memory.text) return res.status(400).json({ error: 'Text is required.' });
     const { rows } = await pool.query(`INSERT INTO memories(text,type,due_at,priority) VALUES($1,$2,$3,$4) RETURNING id,created_at AS created,text,type,due_at AS due,priority,done,reminder_email_id`, [memory.text, memory.type, memory.due, memory.priority]);
     const saved = rows[0]; let reminderScheduled = false; let reminderChannels = []; let reminderError = null;
+    if (await scheduleReminderPush(saved)) {reminderScheduled=true;reminderChannels.push('jarvis-push');}
     if (saved.due) {
       if (hasEmailReminders) try { const scheduled = await scheduleReminderEmail(saved); if (scheduled.id) { saved.reminder_email_id = scheduled.id; reminderScheduled = true; reminderChannels.push('email'); await pool.query('UPDATE memories SET reminder_email_id=$1 WHERE id=$2', [scheduled.id, saved.id]); } } catch (err) { reminderError = err.message; console.error('Reminder email scheduling failed:', err); }
       if (hasNtfyReminders) try { if (await scheduleReminderNtfy(saved)) { reminderScheduled = true; reminderChannels.push('phone'); } } catch (err) { reminderError = reminderError || err.message; console.error('Phone reminder scheduling failed:', err); }
@@ -1128,6 +1158,7 @@ app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html'))
 if (require.main === module) {
   initDb().then(async () => {
     await initGoogleOAuthStore();
+    if (pool && authSecret) await jarvisPush.init();
     if (pool) {
       let workflowTickRunning = false;
       const tick = async () => {
@@ -1169,5 +1200,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
-
 
