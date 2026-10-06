@@ -223,7 +223,7 @@ function resizeImageForAgent(file){return new Promise((resolve,reject)=>{
 function clearImage(){selectedImageDataUrl=null;const input=document.getElementById('imageFile');if(input)input.value='';document.getElementById('imagePreview').style.display='none';document.getElementById('imagePreviewImg').removeAttribute('src');}
 async function copyMessage(index){const textToCopy=visibleContent(messages[index]?.content||'');try{await navigator.clipboard.writeText(textToCopy);return}catch(e){}const ta=document.createElement('textarea');ta.value=textToCopy;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
 function calendarUrl(action){const params=new URLSearchParams({title:action.title||'',start:action.start||'',end:action.end||'',notes:action.notes||'',location:action.location||''});return '/api/calendar.ics?'+params.toString()}
-function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>${action.alreadyExists?'Already on calendar — no duplicate created':'Added to calendar'}</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
+function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>${action.rescheduled?'Calendar event moved':action.alreadyExists?'Already on calendar — no duplicate created':'Added to calendar'}</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
 let attentionItems=[],attentionStates=new Map(),attentionLoaded=false,attentionStateChecked=0,attentionBusy=false;
 function attentionIsVisible(item){const state=attentionStates.get(item.id);return !state||state.status==='active'||(state.status==='snoozed'&&new Date(state.snoozed_until).getTime()<=Date.now());}
 function attentionCardTitle(item){
@@ -274,7 +274,7 @@ function actionHtml(action){
  }
  return '';
 }
-function approvalResultMessage(decision,execution){if(decision!=='approve')return 'Denied. The agent did not execute the action.';if(execution?.ok===false)return 'Approved, but the action failed: '+(execution.error||'Unable to confirm the result.');if(execution?.alreadyExists)return 'Already on your calendar. No duplicate was created.';return 'Approved. The agent executed the action.'}
+function approvalResultMessage(decision,execution){if(decision!=='approve')return 'Denied. The agent did not execute the action.';if(execution?.ok===false)return 'Approved, but the action failed: '+(execution.error||'Unable to confirm the result.');if(execution?.rescheduled)return 'Approved. The existing calendar event was moved; no new event was created.';if(execution?.alreadyExists)return 'Already on your calendar. No duplicate was created.';return 'Approved. The agent executed the action.'}
 async function decideApproval(id,decision){try{const data=await api(`/api/approvals/${id}/decision`,{method:'POST',body:JSON.stringify({decision})});messages.push({role:'assistant',content:approvalResultMessage(decision,data.execution),actions:data.actions||[]});renderMessages();loadApprovals()}catch(e){alert(e.message)}}
 async function loadApprovals(){
  const version=++approvalLoadVersion;
@@ -415,4 +415,5 @@ chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 <script src="/excel-ui.js"></script><script src="/layout-debug.js"></script></body></html>
+
 
