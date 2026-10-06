@@ -87,15 +87,23 @@ main{max-width:1180px}
 /* Clip horizontal overflow without creating an ancestor scroll container for the sticky header. */
 @supports(overflow:clip){html,body,main{overflow-x:clip}}
 #todayView{overflow-anchor:none}
+
+/* Keep screen controls outside filtered Chat panels and document scrolling. */
+:root{--header-height:100px;--composer-height:90px;--viewport-top:0px;--keyboard-inset:0px}
+.topbar{position:fixed;top:calc(var(--viewport-top) + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(100% - 20px);max-width:1144px;margin:0}
+main{padding-top:calc(var(--header-height) + env(safe-area-inset-top) + 18px)}
+.composer{bottom:var(--keyboard-inset)}
+.chat{padding-bottom:calc(var(--composer-height) + 16px)}
+@media(max-width:800px){main{padding-top:calc(var(--header-height) + env(safe-area-inset-top) + 10px)}.topbar{gap:10px;padding:12px}.topbar .orb{width:42px;height:42px}.top-actions{gap:6px}.ghost-btn{padding:8px;font-size:11px}.composer .input{font-size:16px}}
 </style>
 </head>
 <body id="app">
-<main>
 <header class="topbar">
   <div class="orb"><img src="/reactor.jpg" alt="Jarvis reactor"></div>
   <div class="title-block"><h1>JARVIS</h1><p id="statusLine">Ready</p></div>
   <div class="top-actions"><button class="ghost-btn" onclick="toggleDrawer(true)">☰ More</button><button class="ghost-btn" onclick="logout()">Sign out</button></div>
 </header>
+<main>
 <section id="approvalBar" class="approval-bar" style="display:none"><div id="approvals"></div></section>
 <nav class="view-tabs" aria-label="Jarvis view"><button id="todayTab" class="btn secondary" aria-pressed="false" onclick="showJarvisView('today')">Today</button><button id="chatTab" class="btn secondary" aria-pressed="true" onclick="showJarvisView('chat')">Chat</button></nav>
 <section id="todayView" hidden><div class="attention-head"><h2>Your next actions</h2><button id="attentionRefresh" class="btn secondary" onclick="loadAttention()">Refresh</button></div><div id="attentionStatus" class="attention-status" role="status"></div><div id="attentionItems" class="attention-grid"></div></section>
@@ -105,10 +113,10 @@ main{max-width:1180px}
     <div><h2>Talk to your agent</h2><div class="muted">Ask questions, work through ideas, or tell me what you want to get done.</div></div>
   </div>
   <div id="messages" class="messages"></div>
-  <div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" aria-label="Attach" title="Attach" onclick="document.getElementById('imageFile').click()">📎</button><input id="message" class="input" type="text" placeholder="Tell me what you're thinking..." autocorrect="on" autocapitalize="sentences" spellcheck="true" autocomplete="on" enterkeyhint="send" onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
 </section>
 </div>
 </main>
+<div class="composer"><div id="imagePreview" class="image-preview"><img id="imagePreviewImg" alt="Selected image"><span class="muted">Image attached</span><button type="button" class="btn secondary small" onclick="clearImage()">Remove</button></div><input id="imageFile" type="file" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none" onchange="handleImageSelected(event)"><button type="button" class="btn secondary" aria-label="Attach" title="Attach" onclick="document.getElementById('imageFile').click()">📎</button><input id="message" class="input" type="text" placeholder="Tell me what you're thinking..." autocorrect="on" autocapitalize="sentences" spellcheck="true" autocomplete="on" enterkeyhint="send" onkeydown="if(event.key==='Enter')send()"><button class="btn" onclick="send()">Send</button></div>
 <div id="drawer" class="drawer hidden" onclick="if(event.target===this)toggleDrawer(false)">
   <aside class="drawer-panel">
     <div class="drawer-head"><div><h2 id="drawerTitle">Jarvis</h2><div id="drawerSubtitle" class="muted">Choose where you want to go.</div></div><button class="btn secondary" onclick="toggleDrawer(false)">Close</button></div>
@@ -367,6 +375,24 @@ async function teachMarket(){let topics=[];try{const d=await api('/api/market-le
 function openSection(name='home'){const map={market:['Market','Learn, research, and understand your investments.'],projects:['Projects','Your active work.'],connections:['Connections','Services Jarvis can read or use.'],memory:['Memory','Information available to Jarvis.'],settings:['Settings','Capabilities and controls.'],home:['Jarvis','Choose where you want to go.']};document.getElementById('drawerHome').style.display=name==='home'?'grid':'none';document.querySelectorAll('.drawer-view').forEach(el=>el.classList.add('hidden'));if(name!=='home'){const el=document.getElementById('section'+name.charAt(0).toUpperCase()+name.slice(1));if(el)el.classList.remove('hidden');if(name==='market')loadMarketLearning().catch(()=>{})}const meta=map[name]||map.home;document.getElementById('drawerTitle').textContent=meta[0];document.getElementById('drawerSubtitle').textContent=meta[1];}
 function marketPrompt(text){pendingChatScope='market';toggleDrawer(false);document.getElementById('message').value=text;send()}
 function toggleDrawer(open){document.getElementById('drawer').classList.toggle('hidden',!open);if(open)openSection('home')}
+
+
+function updateScreenControls(){
+ const root=document.documentElement,viewport=window.visualViewport;
+ const unzoomed=!viewport||Math.abs(viewport.scale-1)<0.05;
+ const top=viewport&&unzoomed?Math.max(0,viewport.offsetTop):0;
+ const inset=viewport&&unzoomed?Math.max(0,window.innerHeight-viewport.height-top):0;
+ root.style.setProperty('--viewport-top',top+'px');
+ root.style.setProperty('--keyboard-inset',inset+'px');
+ const header=document.querySelector('.topbar'),composer=document.querySelector('.composer');
+ if(header)root.style.setProperty('--header-height',header.getBoundingClientRect().height+'px');
+ if(composer)root.style.setProperty('--composer-height',composer.getBoundingClientRect().height+'px');
+}
+updateScreenControls();
+window.addEventListener('resize',updateScreenControls);
+window.visualViewport?.addEventListener('resize',updateScreenControls);
+window.visualViewport?.addEventListener('scroll',updateScreenControls);
+if('ResizeObserver' in window){const controlsObserver=new ResizeObserver(updateScreenControls);document.querySelectorAll('.topbar,.composer').forEach(el=>controlsObserver.observe(el));}
 
 load();
 chatSyncTimer=setInterval(syncChat,3000);
