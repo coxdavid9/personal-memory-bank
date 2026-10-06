@@ -61,7 +61,8 @@ function buildVEvent({ title, start, end, notes, location, allDay, uid }) {
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${uid}`,
-    `DTSTAMP:${date(new Date())}`
+    `DTSTAMP:${date(new Date())}`,
+    `CREATED:${date(new Date())}`
   ];
 
   if (allDay) {
@@ -210,7 +211,7 @@ class CalDAVClient {
     const parseDateValue=(raw,tzid=null)=>{const value=String(raw||'').trim();if(!value)return null;if(/^\d{8}$/.test(value))return value.slice(0,4)+'-'+value.slice(4,6)+'-'+value.slice(6,8);const m=value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);if(!m)return value;const iso=m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5]+':'+m[6];return m[7]?iso+'Z':iso+(tzid?'['+tzid+']':'');};
     const unfold=text=>String(text||'').replace(/\r?\n[ \t]/g,''); const events=[];
     for(const response of responses(xml)){const calendarData=tag(response,'calendar-data');if(!calendarData)continue;const data=unfold(calendarData);const matches=data.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/gi)||[];
-      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID');if(!dtstart)continue;events.push({uid:uid?.value||null,title:summary?.value||'(Untitled event)',start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart)});}
+      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID'),recorded=line('CREATED')||line('DTSTAMP');if(!dtstart)continue;events.push({uid:uid?.value||null,title:summary?.value||'(Untitled event)',start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart),recordedAt:recorded?parseDateValue(recorded.value):null});}
     } return events.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
   }
 

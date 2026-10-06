@@ -1,4 +1,14 @@
 const test = require('node:test');
+test('calendar records expose creation time and fall back to legacy Jarvis DTSTAMP',async()=>{
+ const {CalDAVClient,buildVEvent}=require('../caldav');
+ const blocks=['CREATED:20261006T154100Z\nDTSTAMP:20261006T160000Z','DTSTAMP:20261006T154100Z',''];
+ for(const [i,stamp] of blocks.entries()){
+  const xml='<multistatus xmlns="DAV:"><response><propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav">BEGIN:VEVENT\nUID:test@personal-agent\nDTSTART:20261006T190000Z\nSUMMARY:Interview\n'+stamp+'\nEND:VEVENT</calendar-data></prop></propstat></response></multistatus>';
+  const c=new CalDAVClient({baseUrl:'https://calendar.example/',username:'u',password:'p',calendarUrl:'https://calendar.example/cal/',fetchImpl:async()=>new Response(xml,{status:207})});
+  const events=await c.listUpcomingEvents();assert.equal(events[0].recordedAt,i===2?null:'2026-10-06T15:41:00Z');
+ }
+ assert.match(buildVEvent({title:'Interview',start:'2026-10-06T19:00:00Z',end:'2026-10-06T19:30:00Z',uid:'test'}),/\r\nCREATED:\d{8}T\d{6}Z\r\n/);
+});
 const assert = require('node:assert/strict');
 const { buildVEvent } = require('../caldav');
 

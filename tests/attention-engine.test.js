@@ -1,5 +1,19 @@
 const test=require('node:test');const assert=require('node:assert/strict');const {buildAttentionCandidates}=require('../attention-engine');
 const empty={memories:[],jobs:[],github:{items:[]},email:{yahoo:[],gmail:[]},calendar:{personal:[],work:[]},market:{material:[]},approvals:[]};
+const invitation={subject:'Robert Half Interview - David Cox',date:'2026-10-06T14:00:00Z',conversationState:'waiting_on_you'};
+const interview={uid:'test@personal-agent',title:'Robert Half Interview — David Cox',start:'2026-10-06T19:00:00Z',end:'2026-10-06T19:30:00Z',recordedAt:'2026-10-06T15:41:00Z'};
+function invitationFeed(email=invitation,event=interview){return buildAttentionCandidates({...empty,email:{yahoo:[email]},calendar:{personal:[event]}},new Date('2026-10-06T18:00:00Z'));}
+test('calendared Robert Half invitation needs no reply review but meeting preparation remains',()=>{
+ const items=invitationFeed();assert.ok(!items.some(x=>x.domain==='email'));assert.ok(items.some(x=>x.domain==='calendar'));
+});
+test('explicit reply requests and later messages still surface for calendared meetings',()=>{
+ for(const email of [{...invitation,snippet:'Please confirm your attendance'},{...invitation,snippet:'Action required: complete forms'},{...invitation,date:'2026-10-06T16:00:00Z'},{...invitation,subject:'Nestlé Interview - Availability Request'},{...invitation,subject:'Updated Robert Half Interview - David Cox'}])assert.ok(invitationFeed(email).some(x=>x.domain==='email'));
+});
+test('missing timestamps and unrelated or external events never suppress an invitation',()=>{
+ for(const event of [{...interview,recordedAt:null},{...interview,uid:'external-event'},{...interview,title:'Other interview'},{...interview,recordedAt:'invalid'}])assert.ok(invitationFeed(invitation,event).some(x=>x.domain==='email'));
+ assert.ok(invitationFeed({...invitation,date:null}).some(x=>x.domain==='email'));
+ const items=buildAttentionCandidates({...empty,email:{yahoo:[invitation]},calendar:{work:[interview]}},new Date('2026-10-06T18:00:00Z'));assert.ok(items.some(x=>x.domain==='email'));
+});
 test('saved job alone is not an attention candidate',()=>{const c=buildAttentionCandidates({...empty,jobs:[{title:'CAS Accounting Manager',company:'Adams Brown',status:'saved'}]},new Date('2026-10-02T19:00:00Z'));assert.deepEqual(c,[]);});
 test('unanswered email competes across domains',()=>{const c=buildAttentionCandidates({...empty,email:{yahoo:[{subject:'Need your answer',date:'2026-10-02T18:00:00Z',conversationState:'waiting_on_you'}],gmail:[]}},new Date('2026-10-02T19:00:00Z'));assert.equal(c[0].domain,'email');});
 test('handled email is excluded',()=>{const c=buildAttentionCandidates({...empty,email:{yahoo:[{subject:'Need your answer',conversationState:'waiting_on_them'}],gmail:[]}},new Date('2026-10-02T19:00:00Z'));assert.deepEqual(c,[]);});
