@@ -14,3 +14,19 @@ test('reply headers can match a changed subject',()=>assert.equal(annotateConver
 test('routine account confirmations stay out of action feed, security failures remain',()=>{
  const {isActionableEmail}=require('../email');assert.equal(isActionableEmail({subject:'Your trade confirmation',senderAddress:'service@fidelity.com'}),false);assert.equal(isActionableEmail({subject:'Payment failed — action required',senderAddress:'no-reply@bank.com'}),true);
 });
+test('welcome and created-account confirmations are not priority actions',()=>{
+ const {isActionableEmail}=require('../email');
+ for(const subject of ['Welcome To Our Family',"You've successfully created an online account!",'Your online account was created'])assert.equal(isActionableEmail({subject,senderAddress:'service@example.com'}),false,subject);
+});
+test('welcome messages with explicit required steps still surface',()=>{
+ const {isActionableEmail}=require('../email');
+ assert.equal(isActionableEmail({subject:'Welcome to Example — verify your email',senderAddress:'no-reply@example.com'}),true);
+ assert.equal(isActionableEmail({subject:'Welcome To Our Family',snippet:'Please complete the required forms before Monday.'}),true);
+ assert.equal(isActionableEmail({subject:"You've created an online account!",snippet:'Activate your account to finish.'}),true);
+ assert.equal(isActionableEmail({subject:'Cost Accountant Interview: David Cox',senderAddress:'maria@example.com'}),true);
+});
+test('routine messages cannot bypass filtering or crowd out project actions',()=>{
+ const {buildAttentionCandidates}=require('../attention-engine');
+ const feed=buildAttentionCandidates({email:{yahoo:[{subject:'Welcome To Our Family'},{subject:"You've successfully created an online account!"},{subject:'Hello David',conversationState:'unknown'}]},github:{projects:[{repository:'d/project',projectState:{nextActions:['Audit launch readiness']}}]}});
+ assert.equal(feed.length,2);assert.equal(feed[0].domain,'project');assert.equal(feed[1].domain,'email');
+});
