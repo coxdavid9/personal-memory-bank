@@ -380,8 +380,12 @@ function toggleDrawer(open){document.getElementById('drawer').classList.toggle('
 function updateScreenControls(){
  const root=document.documentElement,viewport=window.visualViewport;
  const unzoomed=!viewport||Math.abs(viewport.scale-1)<0.05;
- const top=viewport&&unzoomed?Math.max(0,viewport.offsetTop):0;
- const inset=viewport&&unzoomed?Math.max(0,window.innerHeight-viewport.height-top):0;
+ const viewportTop=viewport&&unzoomed?Math.max(0,viewport.offsetTop):0;
+ const keyboardInset=viewport&&unzoomed?Math.max(0,window.innerHeight-viewport.height-viewportTop):0;
+ // Safari can retain offsetTop after dismissal; only follow it during actual text entry with an open keyboard.
+ const keyboardOpen=document.activeElement?.id==='message'&&keyboardInset>80;
+ const top=keyboardOpen?viewportTop:0;
+ const inset=keyboardOpen?keyboardInset:0;
  root.style.setProperty('--viewport-top',top+'px');
  root.style.setProperty('--keyboard-inset',inset+'px');
  const header=document.querySelector('.topbar'),composer=document.querySelector('.composer');
@@ -390,6 +394,8 @@ function updateScreenControls(){
 }
 updateScreenControls();
 window.addEventListener('resize',updateScreenControls);
+document.addEventListener('focusin',updateScreenControls);
+document.addEventListener('focusout',()=>window.requestAnimationFrame(updateScreenControls));
 window.visualViewport?.addEventListener('resize',updateScreenControls);
 window.visualViewport?.addEventListener('scroll',updateScreenControls);
 if('ResizeObserver' in window){const controlsObserver=new ResizeObserver(updateScreenControls);document.querySelectorAll('.topbar,.composer').forEach(el=>controlsObserver.observe(el));}
