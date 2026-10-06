@@ -52,6 +52,20 @@ const day = value => {
   return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate());
 };
 
+// RFC 5545 content lines end in CRLF and fold at 75 UTF-8 octets.
+function serializeCalendar(text) {
+  const lines = String(text).replace(/\r?\n[ \t]/g, '').replace(/\r?\n$/, '').split(/\r?\n/);
+  return lines.map(line => {
+    const folded = []; let part = '', bytes = 0;
+    for (const character of line) {
+      const size = Buffer.byteLength(character, 'utf8');
+      if (bytes + size > 75) { folded.push(part); part = ' '; bytes = 1; }
+      part += character; bytes += size;
+    }
+    folded.push(part); return folded.join('\r\n');
+  }).join('\r\n') + '\r\n';
+}
+
 function buildVEvent({ title, start, end, notes, location, allDay, uid }) {
   const lines = [
     'BEGIN:VCALENDAR',
@@ -286,7 +300,7 @@ class CalDAVClient {
     let updated=replaceLine(raw,'DTSTART',date(newStart));
     updated=replaceLine(updated,'DTEND',date(newEnd));
     updated=replaceLine(updated,'DTSTAMP',date(new Date()));
-    updated=updated.replace(/\r?\n/g,'\r\n');
+    updated=serializeCalendar(updated);
     return {target:target.toString(),etag:source.etag,body:updated,result:{uid:event.uid,title:event.title,start:newStart.toISOString(),end:newEnd.toISOString(),calendarName:this.calendarName,rescheduled:true}};
   }
 
@@ -299,7 +313,15 @@ class CalDAVClient {
     const prepared=await this.prepareReschedule(args);
     const response=await this.request(prepared.target,{method:'PUT',headers:{'Content-Type':'text/calendar; charset=utf-8','If-Match':prepared.etag},body:prepared.body});
     if (response.status===412) throw new Error('The event changed before the update. Check it again before retrying.');
-    if (!response.ok) throw new Error('The calendar update could not be confirmed. Check the event before retrying.');
+    if (!response.ok) {
+      // Never disclose the response body, resource URL, credentials or event data.
+      const body=await response.text().catch(()=>'');
+      const known=['valid-calendar-data','valid-calendar-object-resource','supported-calendar-data','no-uid-conflict','need-privileges','quota-not-exceeded','number-of-matches-within-limits'];
+      const condition=known.find(name=>new RegExp('<(?:[A-Za-z_][\\w.-]*:)?'+name+'(?:\\s|/?>)').test(body));
+      const status=Number.isInteger(response.status)?response.status:0;
+      console.error('CalDAV reschedule PUT rejected', {status,...(condition?{condition}:{})});
+      throw Object.assign(new Error('The calendar update was rejected (HTTP '+status+(condition?'; '+condition:'')+'). Check the event before retrying.'), {status});
+    }
     return prepared.result;
   }
 
@@ -347,5 +369,4 @@ function buildCalDAVClientFromEnv(fetchImpl = fetch) {
 }
 
 module.exports = { CalDAVClient, buildCalDAVClientFromEnv, buildVEvent };
-
 
