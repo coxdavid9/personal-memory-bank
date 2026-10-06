@@ -132,6 +132,7 @@ test('Yahoo event verification uses read tools rather than email or calendar wri
   assert.ok(!tools.includes('email_search'));
  }
  assert.equal(inferJob('Check Yahoo for my interview details'),'communications');
+ assert.equal(inferJob('Check my email and calendar'),'communications');
  assert.equal(inferJob('Add the Robert Half interview to my Yahoo calendar'),'calendar');
  assert.equal(inferJob('Check my Yahoo calendar and add a meeting to my calendar'),'calendar');
  assert.ok(!buildAgentTools({job:'calendar_read',enabledCapabilities:[]}).some(t=>t.name==='get_calendar_events'));
