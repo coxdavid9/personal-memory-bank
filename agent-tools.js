@@ -525,12 +525,15 @@ async function executeAgentTool(name, args, deps) {
     if (!action.title) return { ok: false, error: 'Calendar event title is required.' };
     if (deps.caldav?.isConfigured()) {
       try {
-        await deps.caldav.createCalDAVEvent(action);
+        const result = await deps.caldav.createCalDAVEvent(action);
+        action.alreadyExists = Boolean(result?.alreadyExists);
+        action.calendarName = result?.calendarName || deps.caldav.calendarName || null;
         action.delivery = 'caldav';
         if (deps.onAction) deps.onAction(action);
-        return { ok: true, delivery: 'caldav', action };
+        return { ok: true, delivery: 'caldav', alreadyExists:action.alreadyExists, action };
       } catch (err) {
-        console.error('CalDAV calendar write failed; falling back to PWA handoff:', err.message);
+        console.error('CalDAV calendar write failed:', err.message);
+        return {ok:false,error:'Calendar save could not be confirmed. No manual Add to Calendar fallback was issued, to avoid a duplicate. Check the calendar before retrying.'};
       }
     }
     if (deps.onAction) deps.onAction(action);
@@ -544,3 +547,4 @@ async function executeAgentTool(name, args, deps) {
 }
 
 module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool, validateImageDataUrl };
+
