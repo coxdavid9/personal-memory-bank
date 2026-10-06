@@ -310,7 +310,7 @@ function inferJob(message = '', hasFiles = false, recent = []) {
   // Remove explicit prohibitions before checking whether this is a write request.
   const intentText = text.replace(/\b(?:do not|don't|never)\s+(?:create|add|put|make|schedule|block)\b[^.!?]*(?:[.!?]|$)/g, '');
   const calendarWrite = /\b(?:add|put|create|make|schedule|block)\b[\s\S]{0,160}\b(?:calendar|calender|caledar|caleder)\b/.test(intentText);
-  if (!calendarWrite && (
+  if (!calendarWrite && !/email.*calendar|calendar.*email/.test(text) && (
     /upcoming events|calendar events|what(?:'s| is|s) on (?:my )?(?:(?:work|yahoo|personal) )?calendar|what do i have (?:scheduled|on my calendar)|work calendar/.test(text) ||
     (/\bcalendar\b/.test(text) && /^(?:please\s+)?(?:check|verify|confirm|find|search|look for|list|show)\b/.test(text.trim()))
   )) return 'calendar_read';
