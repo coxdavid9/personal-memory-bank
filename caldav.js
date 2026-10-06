@@ -78,6 +78,21 @@ function buildVEvent({ title, start, end, notes, location, allDay, uid }) {
   return lines.concat(['END:VEVENT', 'END:VCALENDAR']).join('\r\n') + '\r\n';
 }
 
+
+const unescapeCalendarText = value => String(value).replace(/\\([nN,;\\])/g, (_, c) => /[nN]/.test(c) ? '\n' : c);
+const normalizedTitle = value => String(value || '').normalize('NFKC').trim().replace(/[\u2010-\u2015]/g, '-').replace(/\s+/g, ' ').toLowerCase();
+function sameEventStart(existing, requested) {
+  if (requested.allDay) return existing.start === new Date(requested.start).toISOString().slice(0,10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(existing.start || '')) return false;
+  if (existing.timezone) {
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {timeZone:existing.timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(requested.start)).map(p=>[p.type,p.value]));
+      return existing.start.split('[')[0] === parts.year+'-'+parts.month+'-'+parts.day+'T'+parts.hour+':'+parts.minute+':'+parts.second;
+    } catch { return false; }
+  }
+  return new Date(existing.start).getTime() === new Date(requested.start).getTime();
+}
+
 class CalDAVClient {
   constructor({ baseUrl, username, password, calendarName = 'Agent', calendarUrl = '', fetchImpl = fetch } = {}) {
     this.baseUrl = baseUrl ? new URL(baseUrl).toString() : '';
@@ -204,14 +219,21 @@ class CalDAVClient {
   async listUpcomingEvents({ days = 2, lookbackHours = 0 } = {}) {
     const calendar = await this.discover(); if (!calendar) throw this.discoveryError || new Error('CalDAV is not configured.');
     const safeDays = Math.min(14, Math.max(1, Number(days) || 2)); const now = Date.now(); const start = new Date(now - Math.min(24, Math.max(0, Number(lookbackHours) || 0)) * 60 * 60 * 1000); const end = new Date(now + safeDays * 24 * 60 * 60 * 1000);
+    return this.listEvents({start,end});
+  }
+
+  async listEvents({start,end}) {
+    const calendar = await this.discover(); if (!calendar) throw this.discoveryError || new Error('CalDAV is not configured.');
+    if (!Number.isFinite(new Date(start).getTime()) || !Number.isFinite(new Date(end).getTime()) || new Date(end) <= new Date(start)) throw new Error('Invalid calendar read range.');
     const toCalDavUtc = value => { const d = new Date(value); const p=n=>String(n).padStart(2,'0'); return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z'; };
     const body = '<?xml version="1.0" encoding="UTF-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="'+toCalDavUtc(start)+'" end="'+toCalDavUtc(end)+'"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>';
     const r=await this.request(calendar,{method:'REPORT',headers:{Depth:'1','Content-Type':'application/xml; charset=utf-8'},body}); if(!r.ok&&r.status!==207) throw Object.assign(new Error('CalDAV read failed.'), { status:r.status });
     const xml=await r.text();
+    if (!/<(?:[A-Za-z_][\w.-]*:)?multistatus\b/i.test(xml) || /HTTP\/\S+\s+[45]\d{2}\b/i.test(xml)) throw new Error('Calendar events could not be verified. No calendar write was attempted.');
     const parseDateValue=(raw,tzid=null)=>{const value=String(raw||'').trim();if(!value)return null;if(/^\d{8}$/.test(value))return value.slice(0,4)+'-'+value.slice(4,6)+'-'+value.slice(6,8);const m=value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);if(!m)return value;const iso=m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5]+':'+m[6];return m[7]?iso+'Z':iso+(tzid?'['+tzid+']':'');};
     const unfold=text=>String(text||'').replace(/\r?\n[ \t]/g,''); const events=[];
     for(const response of responses(xml)){const calendarData=tag(response,'calendar-data');if(!calendarData)continue;const data=unfold(calendarData);const matches=data.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/gi)||[];
-      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID'),recorded=line('CREATED')||line('DTSTAMP');if(!dtstart)continue;events.push({uid:uid?.value||null,title:summary?.value||'(Untitled event)',start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart),recordedAt:recorded?parseDateValue(recorded.value):null});}
+      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID'),recorded=line('CREATED')||line('DTSTAMP');if(!dtstart)continue;events.push({uid:uid?.value||null,title:unescapeCalendarText(summary?.value||'(Untitled event)'),start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart),recordedAt:recorded?parseDateValue(recorded.value):null});}
     } return events.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
   }
 
@@ -244,23 +266,31 @@ class CalDAVClient {
   async createCalDAVEvent(event) {
     const calendar = await this.discover();
     if (!calendar) throw new Error('CalDAV calendar is unavailable.');
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+    const readStart = new Date(event.allDay ? Date.UTC(start.getUTCFullYear(),start.getUTCMonth(),start.getUTCDate()) : start.getTime() - 1000);
+    const readEnd = new Date(Math.max(end.getTime(),readStart.getTime()+86400000)+1000);
+    const findExisting = async () => (await this.listEvents({start:readStart,end:readEnd})).find(existing =>
+      normalizedTitle(existing.title) === normalizedTitle(event.title) && sameEventStart(existing,event));
+    // Check the actual requested date, including past and distant future events.
+    // Do not overwrite notes, locations or join links when the event already exists.
+    const existing = await findExisting();
+    if (existing) return {uid:existing.uid,calendarName:this.calendarName,alreadyExists:true};
 
-    const uid = crypto.randomUUID() + '@personal-agent';
-    const body = buildVEvent({ ...event, uid });
-    const r = await this.request(
-      new URL(encodeURIComponent(uid) + '.ics', calendar).toString(),
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'text/calendar; charset=utf-8',
-          'If-None-Match': '*'
-        },
-        body
-      }
-    );
-
+    // A stable resource plus If-None-Match protects concurrent requests and retries.
+    const key = JSON.stringify([normalizedTitle(event.title),event.allDay ? day(event.start) : date(event.start),Boolean(event.allDay)]);
+    const uid = 'jarvis-' + crypto.createHash('sha256').update(key).digest('hex') + '@personal-agent';
+    const body = buildVEvent({...event,uid});
+    const r = await this.request(new URL(encodeURIComponent(uid)+'.ics',calendar).toString(), {
+      method:'PUT',headers:{'Content-Type':'text/calendar; charset=utf-8','If-None-Match':'*'},body
+    });
+    if (r.status === 412) {
+      const concurrent = await findExisting();
+      if (concurrent) return {uid:concurrent.uid,calendarName:this.calendarName,alreadyExists:true};
+      throw new Error('Calendar event resource already exists but could not be verified. No duplicate was created.');
+    }
     if (!r.ok) throw new Error(`CalDAV event write failed (${r.status}).`);
-    return { uid, calendarName: this.calendarName };
+    return {uid,calendarName:this.calendarName,alreadyExists:false};
   }
 }
 
