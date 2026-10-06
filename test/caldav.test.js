@@ -74,3 +74,16 @@ test('iCloud discovery falls back to the well-known CalDAV endpoint when root re
   assert.equal(calendar, 'https://caldav.icloud.com/123/calendars/agent/');
   assert.deepEqual(calls.slice(0,2).map(x=>x.url), ['https://caldav.icloud.com/','https://caldav.icloud.com/.well-known/caldav']);
 });
+
+test('verification lookback includes recently ended events without changing upcoming feeds',async()=>{
+ const {CalDAVClient}=require('../caldav');
+ const starts=[];
+ const client=new CalDAVClient({baseUrl:'https://cal.example.test/',username:'u',password:'p',calendarUrl:'https://cal.example.test/cal/',fetchImpl:async(_url,options)=>{
+  const compact=options.body.match(/time-range start="([^"]+)"/)[1];
+  starts.push(Date.parse(compact.replace(/^(....)(..)(..)T(..)(..)(..)Z$/,'$1-$2-$3T$4:$5:$6Z')));
+  return new Response('<multistatus xmlns="DAV:"/>',{status:207});
+ }});
+ await client.listUpcomingEvents({days:1});
+ await client.listUpcomingEvents({days:1,lookbackHours:24});
+ assert.ok(Math.abs(starts[0]-starts[1]-24*3600000)<2000);
+});
