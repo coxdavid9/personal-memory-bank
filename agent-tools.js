@@ -323,6 +323,10 @@ function inferJob(message = '', hasFiles = false, recent = []) {
   const intentText = text.replace(/\b(?:do not|don't|never)\s+(?:create|add|put|make|schedule|block|reschedule|move|delete|change)\b[^.!?]*(?:[.!?]|$)/g, '');
     if (/\b(?:reschedule|move|delete|change)\b[\s\S]{0,160}\b(?:calendar|event|appointment|meeting)\b/.test(intentText) ||
       (/\b(?:reschedule|move)\b[\s\S]{0,80}\bit\b/.test(intentText) && /calendar|event/.test(String(last?.content||'').toLowerCase()))) return 'calendar';
+  // A named reminder being moved to another time is calendar work, even when
+  // its title contains a competing keyword such as "test" or "interview".
+  if (/\b(?:move|reschedule)\b[\s\S]{0,160}\breminder\b/.test(intentText) &&
+      /\b(?:today|tomorrow|minutes?|hours?|am|pm)\b|\d{1,2}:\d{2}/.test(intentText)) return 'calendar';
   const calendarWrite = /\b(?:add|put|create|make|schedule|block)\b[\s\S]{0,160}\b(?:calendar|calender|caledar|caleder)\b/.test(intentText);
   if (!calendarWrite && !/email.*calendar|calendar.*email/.test(text) && (
     /upcoming events|calendar events|what(?:'s| is|s) on (?:my )?(?:(?:work|yahoo|personal) )?calendar|what do i have (?:scheduled|on my calendar)|work calendar/.test(text) ||
