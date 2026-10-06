@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { executeSkill } = require('./policy');
+const { meetingJoinLinks } = require('./meeting-links');
 
 const IMAGE_DATA_URL_RE = /^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
 const MAX_IMAGE_DATA_URL_LENGTH = 4_500_000;
@@ -87,11 +88,12 @@ const calendarEventTool = {
       title: { type: 'string', description: 'Short calendar event title.' },
       start: { type: 'string', description: 'ISO 8601 start timestamp with timezone offset.' },
       end: { type: 'string', description: 'ISO 8601 end timestamp with timezone offset.' },
-      notes: { type: ['string','null'], description: 'Optional event notes.' },
+      notes: { type: ['string','null'], description: 'Optional event notes. Preserve any meeting join URL supplied by David; never invent one.' },
+      source_email_uid: { type: ['integer','null'], description: 'Yahoo invitation message UID when creating an event from email. Search for the matching invitation if needed. The server copies its actual meeting join link into notes before approval. Null for events not based on a Yahoo invitation.' },
       location: { type: ['string','null'], description: 'Optional event location.' },
       allDay: { type: 'boolean', description: 'Whether this is an all-day event.' }
     },
-    required: ['title','start','end','notes','location','allDay'],
+    required: ['title','start','end','notes','source_email_uid','location','allDay'],
     additionalProperties: false
   }
 };
@@ -279,7 +281,7 @@ const JOB_SKILLS = Object.freeze({
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows','create_calendar_event'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['test_connections','save_memory','get_personal_context','create_calendar_event'],
+  calendar: ['test_connections','save_memory','get_personal_context','email_search','email_read','create_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
@@ -483,6 +485,16 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'gmail_search') return run('gmail_search', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.search(args)}; });
   if (name === 'gmail_read') return run('gmail_read', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'work Gmail',message:await deps.emailClients.gmail.read(args.uid)}; });
   if (name === 'create_calendar_event') {
+    // Resolve the source before approval so the approved notes are exactly what gets written.
+    if (!deps.skipPolicy && args.source_email_uid != null) {
+      const email = await executeAgentTool('email_read', {uid:args.source_email_uid}, deps);
+      if (email?.ok !== true || !email.connected || !email.message) return {ok:false,error:'The invitation could not be read. No calendar event was prepared.'};
+      const links = meetingJoinLinks(email.message.body);
+      if (links.length > 1) return {ok:false,error:'The invitation contains multiple meeting join links. Confirm which meeting to use before creating the event.'};
+      const join = links[0];
+      args = {...args,source_email_uid:null,notes:join ? ('Join meeting: '+join+'\n\n'+String(args.notes||'')).slice(0,4000) : args.notes};
+      if (!join) args.notes = ('No meeting join link found in the invitation text.\n\n'+String(args.notes||'')).slice(0,4000);
+    }
     return run('create_calendar_event', async () => {
     const start = new Date(args.start);
     const end = new Date(args.end);
