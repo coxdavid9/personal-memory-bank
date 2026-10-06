@@ -226,6 +226,13 @@ function calendarUrl(action){const params=new URLSearchParams({title:action.titl
 function calendarActionHtml(action){if(!action||action.type!=='calendar.create_event')return '';const title=esc(action.title||'Calendar event');const start=new Date(action.start);const when=start.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});if(action.delivery==='caldav')return `<div class="action-card"><strong>Added to Agent calendar</strong><span class="muted">${title} · ${esc(when)}</span></div>`;return `<div class="action-card"><strong>Calendar event prepared</strong><span class="muted">${title} · ${esc(when)}</span><br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="${calendarUrl(action)}" target="_blank" rel="external noopener">Open in Safari &amp; Add to Calendar</a></div>`}
 let attentionItems=[],attentionStates=new Map(),attentionLoaded=false,attentionStateChecked=0,attentionBusy=false;
 function attentionIsVisible(item){const state=attentionStates.get(item.id);return !state||state.status==='active'||(state.status==='snoozed'&&new Date(state.snoozed_until).getTime()<=Date.now());}
+function attentionCardTitle(item){
+ const full=String(item.text||'').replace(/\s+/g,' ').trim();
+ if(item.domain!=='project'||full.length<=120)return full;
+ const action=full.match(/(?:^|[:.]\s+)((?:audit|build|review|update|fix|verify|record|test|complete|implement|check|refresh)\b[\s\S]*)/i)?.[1]||full;
+ const first=action.split(/[,]|\.\s+/)[0].trim();
+ return first.length<=120?first:first.slice(0,117).replace(/\s+\S*$/,'')+'…';
+}
 function attentionCardHtml(item){
  const visible=attentionIsVisible(item),state=attentionStates.get(item.id),id=/^[a-f0-9]{64}$/.test(item.id||'')?item.id:'';
  let open='';
@@ -234,7 +241,7 @@ function attentionCardHtml(item){
  else if(item.domain==='approval')open='<button class="btn secondary" onclick="showJarvisView(\'chat\');loadApprovals()">Review approval</button>';
  else open=`<button class="btn secondary" onclick="openAttention('${id}')">Work on this</button>`;
  const label=visible?'':state?.status==='handled'?'Handled':'Snoozed until '+new Date(state?.snoozed_until).toLocaleString();
- return `<article class="attention-card ${visible?'':'handled'}"><span class="badge">${esc(item.domain)}</span><h3>${esc(item.text)}</h3><details><summary>Why this surfaced</summary><p>${esc(item.why)}</p>${item.evidence?'<p class="muted">'+esc(item.evidence)+'</p>':''}</details><div class="attention-controls">${open}${visible?`<button class="btn" onclick="decideAttentionItem('${id}','handled',this)">Mark handled</button><button class="btn secondary" onclick="decideAttentionItem('${id}','snoozed',this)">Snooze 24h</button>`:`<button class="btn secondary" onclick="decideAttentionItem('${id}','active',this)">Undo</button>`}</div>${label?'<div class="attention-state">'+esc(label)+'</div>':''}</article>`;
+ return `<article class="attention-card ${visible?'':'handled'}"><span class="badge">${esc(item.domain)}${item.domain==='project'&&item.repository?' · '+esc(item.repository.split('/').pop()):''}</span><h3>${esc(attentionCardTitle(item))}</h3><details><summary>Why this surfaced</summary><p>${esc(item.why)}</p>${attentionCardTitle(item)!==String(item.text||'').replace(/\s+/g,' ').trim()?'<p>'+esc(item.text)+'</p>':''}${item.evidence?'<p class="muted">'+esc(item.evidence)+'</p>':''}</details><div class="attention-controls">${open}${visible?`<button class="btn" onclick="decideAttentionItem('${id}','handled',this)">Mark handled</button><button class="btn secondary" onclick="decideAttentionItem('${id}','snoozed',this)">Snooze 24h</button>`:`<button class="btn secondary" onclick="decideAttentionItem('${id}','active',this)">Undo</button>`}</div>${label?'<div class="attention-state">'+esc(label)+'</div>':''}</article>`;
 }
 function renderAttention(){const visible=attentionItems.filter(attentionIsVisible);const hidden=attentionItems.filter(x=>!attentionIsVisible(x));document.getElementById('attentionItems').innerHTML=(visible.length?visible.map(attentionCardHtml).join(''):'<p class="muted">No current actions surfaced from the connected sources.</p>')+(hidden.length?'<details><summary>Handled or snoozed ('+hidden.length+')</summary>'+hidden.map(attentionCardHtml).join('')+'</details>':'');}
 async function loadAttentionState(){const data=await api('/api/attention/state');attentionStates=new Map((data.states||[]).map(x=>[x.id,x]));attentionStateChecked=Date.now();renderAttention();renderMessages();}
@@ -407,4 +414,3 @@ chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
 <script src="/excel-ui.js"></script><script src="/layout-debug.js"></script></body></html>
-
