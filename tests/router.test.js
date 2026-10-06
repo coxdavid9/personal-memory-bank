@@ -45,6 +45,31 @@ const calendarHistory=[
  {role:'user',content:'Add a meeting at 9am tomorrow for 30 minutes'},
  {role:'assistant',content:'What should I title the 30-minute meeting at 9:00 AM tomorrow?'}
 ];
+test('interview duration replies retain calendar creation across clarification turns',()=>{
+ const history=[
+  {role:'user',content:'Add my Robert Half interview to my Yahoo calendar today at 2pm'},
+  {role:'assistant',content:'What duration should I use for the interview?'}
+ ];
+ assert.equal(inferJob(history[0].content),'calendar');
+ const job=inferJob('30 minutes',false,history);
+ assert.equal(job,'calendar');
+ assert.ok(buildAgentTools({job,enabledCapabilities:['calendar']}).some(t=>t.name==='create_calendar_event'));
+ const next=[...history,{role:'user',content:'30 minutes'},{role:'assistant',content:'Where is the interview location?'}];
+ assert.equal(inferJob('Phone',false,next),'calendar');
+ assert.ok(!buildAgentTools({job,enabledCapabilities:[]}).some(t=>t.name==='create_calendar_event'));
+ assert.equal(inferJob('Show my unread email',false,next),'email');
+ assert.equal(inferJob('Fix the code',false,next),'engineering');
+ assert.equal(inferJob('Phone',true,next),'excel_analysis');
+});
+test('job and email interview clarifications keep their original tools',()=>{
+ for(const [request,expected] of [['I have an interview with Robert Half today at 2pm','job_search'],['Check Yahoo for my interview details','communications']]){
+  const history=[{role:'user',content:request},{role:'assistant',content:'What duration should I use for the interview?'}];
+  const job=inferJob('30 minutes',false,history);
+  assert.equal(job,expected);
+  assert.ok(buildAgentTools({job,enabledCapabilities:['calendar','job-search','email']}).some(t=>t.name==='create_calendar_event'));
+ }
+ assert.equal(inferJob('30 minutes',false,[{role:'user',content:'Test my repository'},{role:'assistant',content:'What duration should I use for the interview?'}]),'general');
+});
 test('short calendar title replies preserve calendar tools through the real policy path',async()=>{
  const {executeAgentTool}=require('../agent-tools');
  for(const reply of ['Test','Budget review','Lunch with Ashley']) {
