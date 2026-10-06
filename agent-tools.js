@@ -469,6 +469,10 @@ async function executeAgentTool(name, args, deps) {
     let reminderScheduled = false;
     let reminderChannels = [];
     if (saved.due) {
+      if (deps.scheduleReminderPush && await deps.scheduleReminderPush(saved)) {
+        reminderScheduled = true;
+        reminderChannels.push('jarvis-push');
+      }
       if (deps.hasEmailReminders) {
         try {
           const scheduled = await deps.scheduleReminderEmail(saved);
@@ -492,7 +496,8 @@ async function executeAgentTool(name, args, deps) {
         }
       }
     }
-      return { ok: true, memory: saved, reminderScheduled, reminderChannels };
+      return { ok: true, memory: saved, reminderScheduled, reminderChannels,
+        ...(reminderChannels.includes('jarvis-push')?{reminderNotice:'Queued for Jarvis notifications. Free-hosting checks can run late; this is not confirmed device delivery.'}:{}) };
     });
   }
 

@@ -44,6 +44,10 @@ jobs:
           node --check portfolio.js
           node --check market.js
           node --check caldav.js
+          node --check push-notifications.js
+          node --check push-scheduler-auth.js
+          node --check public/push-ui.js
+          node --check public/sw.js
 
       - name: Browser script syntax
         run: node -e "const fs=require('fs'); const html=fs.readFileSync('public/index.html','utf8'); const js=html.match(/<script>([\\s\\S]*?)<\\/script>/); if(!js) throw new Error('Browser script not found'); new Function(js[1]);"

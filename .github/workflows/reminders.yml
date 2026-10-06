@@ -1,0 +1,26 @@
+name: Jarvis reminders
+on:
+  schedule:
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+permissions:
+  id-token: write
+concurrency:
+  group: jarvis-reminders
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Deliver due reminders
+        shell: bash
+        run: |
+          token=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=jarvis-reminders" | jq -er .value)
+          echo "::add-mask::$token"
+          curl --fail --silent --show-error --max-time 180 \
+            --retry 2 --retry-delay 5 --retry-connrefused \
+            -X POST -H "Authorization: Bearer $token" \
+            https://personal-memory-bank.onrender.com/api/internal/push-reminders
