@@ -82,9 +82,10 @@ class JarvisPush {
       locked=lock.rows[0].locked;
       if (!locked) return {processed:0,busy:true};
       await client.query('UPDATE jarvis_push_settings SET last_tick=NOW() WHERE id=1');
-      const {rows}=await client.query(`SELECT m.id AS memory_id,s.id AS subscription_id,m.due_at
+      // node-postgres Dates retain milliseconds; use that same precision in the delivery key.
+      const {rows}=await client.query(`SELECT m.id AS memory_id,s.id AS subscription_id,date_trunc('milliseconds',m.due_at) AS due_at
         FROM memories m CROSS JOIN jarvis_push_subscriptions s
-        LEFT JOIN jarvis_push_deliveries d ON d.memory_id=m.id AND d.subscription_id=s.id AND d.due_at=m.due_at
+        LEFT JOIN jarvis_push_deliveries d ON d.memory_id=m.id AND d.subscription_id=s.id AND d.due_at=date_trunc('milliseconds',m.due_at)
         WHERE m.done=FALSE AND m.due_at<=NOW() AND m.due_at>NOW()-INTERVAL '24 hours'
           AND m.due_at>=s.created_at AND d.sent_at IS NULL AND COALESCE(d.attempts,0)<5
           AND (d.next_attempt_at IS NULL OR d.next_attempt_at<=NOW())
