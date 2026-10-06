@@ -388,7 +388,8 @@ function updateScreenControls(){
  const height=viewport?viewport.height:window.innerHeight;
  // Safari shrinks innerHeight too, so compare against the layout viewport, not innerHeight alone.
  const availablePan=Math.max(0,Math.max(root.clientHeight,window.innerHeight)-height);
- const keyboardOpen=document.activeElement?.id==='message'&&availablePan>120;
+ // Blur precedes Safari's viewport recovery; hold compensation until the viewport actually expands.
+ const keyboardOpen=availablePan>120;
  // Compensate the fixed-frame pan exactly once. Never add document scrollY.
  const top=viewport&&keyboardOpen?Math.min(availablePan,Math.max(0,viewport.offsetTop)):0;
  root.style.setProperty('--viewport-top',top+'px');
