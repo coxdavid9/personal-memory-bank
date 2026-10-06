@@ -10,12 +10,13 @@ function setup(view = 'today', scrollY = 0) {
   const elements = {
     chatView: { style: { display: view === 'today' ? 'none' : '' } },
     messages: { innerHTML: '' },
+    contentScroller: {scrollHeight:1000,scrollTop:scrollY,clientHeight:900,scrollTo:args=>scrolls.push(args)},
     attentionStatus: { textContent: '' },
     attentionRefresh: { disabled: false }
   };
   const context = vm.createContext({
     document: { getElementById: id => elements[id], documentElement: { scrollHeight: 1000 } },
-    window: { scrollY, innerHeight: 900, scrollTo: args => scrolls.push(args) },
+    window: { scrollY, innerHeight: 900, scrollTo: () => {throw new Error('Document scrolling must not move screen controls');} },
     api: async route => route === '/api/attention/state' ? { states: [] } : { items: [], checkedAt: new Date().toISOString() },
     renderAttention() {}, setWorking() {}
   });
