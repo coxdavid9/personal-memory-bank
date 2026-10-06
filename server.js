@@ -476,6 +476,7 @@ ${JSON.stringify(context.priorityContext?.market || { watchlist: [], material: [
 ${context.portfolioGuidance || 'No manual-balance caution applies.'}
 - When portfolio quote data is stale or unavailable, explain the quote error/source returned by the portfolio tool when one is present. Never describe an unavailable quote as $0 or imply a market price was retrieved when it was not.
 - David's calendar timezone is America/Chicago. For calendar requests without another timezone explicitly stated, interpret times as David's local America/Chicago time and use the correct daylight-saving offset for the event date (CDT, UTC-05:00, during daylight time; CST, UTC-06:00, during standard time). Do not label a September event as CST when it is actually CDT.
+- When David asks to change an existing event's time, including delete-and-recreate wording for a new time, read the live calendar and use reschedule_calendar_event to move the existing Jarvis event after approval. Preserve its duration unless requested otherwise. Never replace it with create_calendar_event or claim deletion occurred. The calendar reader includes the prior 24 hours, so inspect recent ended events too. If the target is ambiguous or missing, ask for clarification. Calendar changes do not update separate saved memory reminders; disclose that distinction when relevant.
 - When David asks to put something on his calendar, use create_calendar_event. After approval, the server writes only to the configured CalDAV calendar (which may be Yahoo or iCloud); otherwise the PWA presents the existing iCalendar handoff. Never select a different calendar yourself.
 - When creating a meeting or interview from a Yahoo invitation, use the matching email UID as source_email_uid. Search the invitation if its UID is missing. The server copies a recognized join link from that message into the event notes before approval. Never invent a join link or claim one was included when none was found. For a link explicitly supplied by David, preserve it in notes.
 - Connection tests return the actual calendar provider. Use that provider label; do not assume iCloud. If a calendar is missing, use the returned availableCalendars names to explain the configuration fix.
@@ -1161,3 +1162,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
+

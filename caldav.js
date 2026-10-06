@@ -222,7 +222,7 @@ class CalDAVClient {
     return this.listEvents({start,end});
   }
 
-  async listEvents({start,end}) {
+  async listEvents({start,end,includeSource=false}) {
     const calendar = await this.discover(); if (!calendar) throw this.discoveryError || new Error('CalDAV is not configured.');
     if (!Number.isFinite(new Date(start).getTime()) || !Number.isFinite(new Date(end).getTime()) || new Date(end) <= new Date(start)) throw new Error('Invalid calendar read range.');
     const toCalDavUtc = value => { const d = new Date(value); const p=n=>String(n).padStart(2,'0'); return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z'; };
@@ -233,7 +233,7 @@ class CalDAVClient {
     const parseDateValue=(raw,tzid=null)=>{const value=String(raw||'').trim();if(!value)return null;if(/^\d{8}$/.test(value))return value.slice(0,4)+'-'+value.slice(4,6)+'-'+value.slice(6,8);const m=value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);if(!m)return value;const iso=m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5]+':'+m[6];return m[7]?iso+'Z':iso+(tzid?'['+tzid+']':'');};
     const unfold=text=>String(text||'').replace(/\r?\n[ \t]/g,''); const events=[];
     for(const response of responses(xml)){const calendarData=tag(response,'calendar-data');if(!calendarData)continue;const data=unfold(calendarData);const matches=data.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/gi)||[];
-      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID'),recorded=line('CREATED')||line('DTSTAMP');if(!dtstart)continue;events.push({uid:uid?.value||null,title:unescapeCalendarText(summary?.value||'(Untitled event)'),start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart),recordedAt:recorded?parseDateValue(recorded.value):null});}
+      for(const block of matches){const line=name=>{const re=new RegExp('(?:^|\\n)'+name+'(?:;([^:]*))?:([^\\n]*)','i');const m=block.match(re);return m?{value:m[2].trim(),params:m[1]||''}:null;};const getTz=e=>e&&e.params.match(/(?:^|;)TZID=([^;:]+)/i)?.[1]||null;const summary=line('SUMMARY'),dtstart=line('DTSTART'),dtend=line('DTEND'),location=line('LOCATION'),uid=line('UID'),recorded=line('CREATED')||line('DTSTAMP');if(!dtstart)continue;events.push({uid:uid?.value||null,title:unescapeCalendarText(summary?.value||'(Untitled event)'),start:parseDateValue(dtstart.value,getTz(dtstart)),end:dtend?parseDateValue(dtend.value,getTz(dtend)):null,location:location?.value||null,timezone:getTz(dtstart),recordedAt:recorded?parseDateValue(recorded.value):null,...(includeSource?{source:{href:tag(response,'href'),etag:tag(response,'getetag'),ics:calendarData}}:{})});}
     } return events.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
   }
 
@@ -261,6 +261,36 @@ class CalDAVClient {
           status === 'calendar_missing' ? 'Set CALDAV_CALENDAR_NAME to an exact name from availableCalendars. Do not change providers or create another calendar unless requested.' :
             'The configured calendar service could not be reached or read. Check the CalDAV URL and try again.' };
     }
+  }
+
+
+  async rescheduleCalDAVEvent({title,current_start,start,end}) {
+    const oldStart=new Date(current_start),newStart=new Date(start),newEnd=new Date(end);
+    if (![oldStart,newStart,newEnd].every(d=>Number.isFinite(d.getTime())) || newEnd<=newStart) throw new Error('Provide valid calendar times with the end after the start.');
+    const calendar=await this.discover();
+    if (!calendar) throw new Error('CalDAV calendar is unavailable.');
+    const matches=(await this.listEvents({start:new Date(oldStart.getTime()-1000),end:new Date(oldStart.getTime()+86400000),includeSource:true})).filter(e=>normalizedTitle(e.title)===normalizedTitle(title)&&sameEventStart(e,{start:current_start,allDay:false}));
+    if (matches.length!==1) throw new Error(matches.length?'Multiple matching events exist. Select or remove the extra entry before moving this event.':'The original event was not found. No changes were made.');
+    const event=matches[0],source=event.source;
+    if (!event.uid?.endsWith('@personal-agent')) throw new Error('Only events created by Jarvis can be moved with this action.');
+    const raw=String(source?.ics||'').replace(/\r?\n[ \t]/g,'');
+    if ((raw.match(/BEGIN:VEVENT/g)||[]).length!==1 || /(?:^|\n)(?:RRULE|RDATE|EXDATE|RECURRENCE-ID)(?:[;:])/i.test(raw) || /(?:^|\n)DTSTART;[^\n]*VALUE=DATE(?:[;:])/i.test(raw)) throw new Error('This action supports single timed events only. No changes were made.');
+    if (!/^"[^"\r\n]+"$/.test(source?.etag||'')) throw new Error('The calendar did not provide a safe version for updating this event.');
+    const target=new URL(source.href,calendar),collection=new URL(calendar);
+    const prefix=collection.pathname.endsWith('/')?collection.pathname:collection.pathname+'/';
+    if (target.origin!==collection.origin || target.username || target.password || target.search || target.hash || !target.pathname.startsWith(prefix) || !target.pathname.slice(prefix.length) || target.pathname.slice(prefix.length).includes('/')) throw new Error('The event location is outside the configured calendar.');
+    const collision=(await this.listEvents({start:new Date(newStart.getTime()-1000),end:new Date(newEnd.getTime()+1000)})).find(e=>e.uid!==event.uid&&normalizedTitle(e.title)===normalizedTitle(title)&&sameEventStart(e,{start,allDay:false}));
+    if (collision) throw new Error('A matching event already exists at the new time. No changes were made.');
+    if (!/(?:^|\n)DTSTART(?:;[^:]*)?:[^\r\n]+/i.test(raw) || !/(?:^|\n)DTEND(?:;[^:]*)?:[^\r\n]+/i.test(raw)) throw new Error('The original event has no complete start and end times.');
+    const replaceLine=(text,name,value)=>text.replace(new RegExp('(^|\\n)'+name+'(?:;[^:]*)?:[^\\r\\n]+','i'),(_,prefix)=>prefix+name+':'+value);
+    let updated=replaceLine(raw,'DTSTART',date(newStart));
+    updated=replaceLine(updated,'DTEND',date(newEnd));
+    updated=replaceLine(updated,'DTSTAMP',date(new Date()));
+    updated=updated.replace(/\r?\n/g,'\r\n');
+    const response=await this.request(target.toString(),{method:'PUT',headers:{'Content-Type':'text/calendar; charset=utf-8','If-Match':source.etag},body:updated});
+    if (response.status===412) throw new Error('The event changed before the update. Check it again before retrying.');
+    if (!response.ok) throw new Error('The calendar update could not be confirmed. Check the event before retrying.');
+    return {uid:event.uid,title:event.title,start:newStart.toISOString(),end:newEnd.toISOString(),calendarName:this.calendarName,rescheduled:true};
   }
 
   async createCalDAVEvent(event) {
@@ -307,3 +337,4 @@ function buildCalDAVClientFromEnv(fetchImpl = fetch) {
 }
 
 module.exports = { CalDAVClient, buildCalDAVClientFromEnv, buildVEvent };
+
