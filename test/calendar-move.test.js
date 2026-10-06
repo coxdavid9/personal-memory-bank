@@ -62,3 +62,21 @@ test('duplicate destination and failed writes produce no success action',async()
  const actions=[];const failed=await executeAgentTool('reschedule_calendar_event',args,{skipPolicy:true,onAction:a=>actions.push(a),caldav:{isConfigured:()=>true,rescheduleCalDAVEvent:async()=>{throw new Error('The event changed');}}});
  assert.equal(failed.ok,false);assert.equal(actions.length,0);
 });
+
+test('named reminder retiming wins over competing title keywords',()=>{
+ for(const request of [
+  'Move today’s “Jarvis reminder test” from 12:07 PM to 30 minutes from now. Keep its one-minute duration.',
+  'Move today\'s "Jarvis reminder test" from 12:07 PM to 30 minutes from now.',
+  'Reschedule my interview reminder for tomorrow at 2 PM',
+  'Move my reminder to 1:19 PM'
+ ]){
+  const job=inferJob(request);
+  assert.equal(job,'calendar',request);
+  const tools=buildAgentTools({job,enabledCapabilities:['calendar']}).map(t=>t.name);
+  assert.ok(tools.includes('get_calendar_events'));
+  assert.ok(tools.includes('reschedule_calendar_event'));
+ }
+ assert.equal(inferJob('Test my repository'),'engineering');
+ assert.equal(inferJob('Move my workbook reminder to 2 PM',true),'excel_analysis');
+ assert.equal(inferJob('Check my Yahoo calendar. Do not move my reminder to 2 PM.'),'calendar_read');
+});
