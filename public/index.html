@@ -148,7 +148,7 @@ main#contentScroller{flex:1 1 auto;min-height:0;width:100%;overflow-x:hidden;ove
     <div id="sectionProjects" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Projects</h3><section class="card"><div id="projects" class="muted">Loading...</div></section></div></div>
     <div id="sectionConnections" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Connections</h3><section class="card"><div id="gmailConnection" class="muted">Checking connections…</div></section></div></div>
     <div id="sectionMemory" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Memory</h3><section class="card"><div id="memories" class="muted">Loading...</div></section></div></div>
-    <div id="sectionSettings" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><h3>Capabilities</h3><p class="muted">These are Jarvis's underlying tools. You normally won't need to change them.</p><section class="card"><div id="caps" class="muted">Loading...</div></section></div></div>
+    <div id="sectionSettings" class="drawer-view hidden"><button class="back-link" onclick="openSection('home')">← Back</button><div class="drawer-section"><section id="pushSettings" class="card"><h3>Jarvis notifications</h3><p id="pushStatus" class="muted" role="status">Open Settings to check this device.</p><button id="pushEnable" class="btn">Enable notifications</button><button id="pushTest" class="btn secondary" hidden>Send test</button><button id="pushDisable" class="btn secondary" hidden>Disable this device</button></section><h3>Capabilities</h3><p class="muted">These are Jarvis's underlying tools. You normally won't need to change them.</p><section class="card"><div id="caps" class="muted">Loading...</div></section></div></div>
   </aside>
 </div>
 <script>
@@ -414,6 +414,7 @@ load();
 chatSyncTimer=setInterval(syncChat,3000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 </script>
-<script src="/excel-ui.js"></script><script src="/layout-debug.js"></script></body></html>
+<script src="/push-ui.js"></script><script src="/excel-ui.js"></script><script src="/layout-debug.js"></script></body></html>
+
 
 
