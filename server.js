@@ -903,13 +903,18 @@ async function getLatestAgentMessages(db, limit = 100) {
   return rows.reverse();
 }
 
-async function recordApprovalDecision(db, approval, decision) {
-  const verb = decision === 'approve' ? 'Approved' : 'Denied';
-  const content = `${verb}: ${approval.skill}.`;
-  await db.query(
-    'INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)',
-    ['assistant', content, JSON.stringify([])]
-  );
+async function recordApprovalDecision(db, approval, decision, {execution,actions=[]}={}) {
+  const verb=decision==='approve'?'Approved':'Denied';
+  let content=`${verb}: ${approval.skill}.`;
+  if(decision==='approve'&&execution){
+    if(execution.ok===false)content='Approved, but the action failed: '+(execution.error||'The result could not be confirmed.');
+    else if(execution.rescheduled)content='Approved. The existing calendar event was moved; no new event was created.';
+    else if(execution.alreadyExists)content='Already on your calendar. No duplicate was created.';
+    else if(execution.ok===true)content=`Approved: ${approval.skill}. The action completed.`;
+    else content=`Approved: ${approval.skill}. The execution result could not be confirmed.`;
+  }
+  await db.query('INSERT INTO agent_messages(role,content,actions) VALUES($1,$2,$3)',
+    ['assistant',content,JSON.stringify(execution?.ok===false?[]:actions)]);
   return content;
 }
 
@@ -928,15 +933,17 @@ app.post('/api/approvals/:id/decision', async (req, res) => {
     if (decision !== 'approve') return res.status(400).json({ error: 'Decision must be approve or deny.' });
     const result = await decideApproval(pool, id, 'approve');
     if (!result.ok) return res.status(409).json(result);
-    await recordApprovalDecision(pool, current, 'approve');
 
     const actions = [];
-    const execution = await executeAgentTool(current.skill, current.args, buildToolDeps({
+    let execution;
+    try {execution = await executeAgentTool(current.skill, current.args, buildToolDeps({
       actions,
       runId: current.runId,
       skipPolicy: true
-    }))
-    await auditToolCall(pool, { runId: current.runId, skill: current.skill, tier: 'ask', decision: 'approved_execute', args: current.args, durationMs: 0 });
+    }));} catch(err) {execution={ok:false,error:err.message||'The action could not be completed.'};}
+    await recordApprovalDecision(pool,current,'approve',{execution,actions});
+    await auditToolCall(pool, { runId: current.runId, skill: current.skill, tier: 'ask', decision: execution?.ok===false?'approved_execute_failed':'approved_execute', args: current.args, durationMs: 0, error: execution?.ok===false?execution.error:null });
+    if(execution?.ok===false)return res.status(422).json({ok:false,error:execution.error,approval:result.approval,execution,actions:[]});
     res.json({ ok: true, approval: result.approval, execution, actions });
   } catch (err) {
     console.error('Approval execution failed:', err);
@@ -1162,4 +1169,5 @@ if (require.main === module) {
 }
 
 module.exports = { app, buildToolDeps, getAgentContext, getLatestAgentMessages, recordApprovalDecision, isWorkPriorityQuestion, enforceAttentionLimit, buildGitHubPriorityItems, agentSystemPrompt, emailHtml };
+
 

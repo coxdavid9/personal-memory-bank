@@ -510,15 +510,25 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'gmail_list_unread') return run('gmail_list_unread', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.listUnread(args.limit)}; });
   if (name === 'gmail_search') return run('gmail_search', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.search(args)}; });
   if (name === 'gmail_read') return run('gmail_read', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'work Gmail',message:await deps.emailClients.gmail.read(args.uid)}; });
-  if (name === 'reschedule_calendar_event') return run('reschedule_calendar_event',async()=>{
+  if (name === 'reschedule_calendar_event') {
     if (!deps.caldav?.isConfigured()) return {ok:false,error:'The configured calendar is not connected. No event was moved.'};
-    try {
-      const result=await deps.caldav.rescheduleCalDAVEvent(args);
-      const action={type:'calendar.create_event',delivery:'caldav',...result};
-      if(deps.onAction)deps.onAction(action);
-      return {ok:true,rescheduled:true,action};
-    } catch(err) {return {ok:false,error:err.message||'The calendar update could not be confirmed.'};}
-  });
+    // Diagnose unsupported/missing targets through the read policy before requesting a write approval.
+    if (!deps.skipPolicy) {
+      const preview=await run('get_calendar_events',async()=>{
+        try {return await deps.caldav.previewReschedule(args);}
+        catch(err){return {ok:false,error:err.message||'The calendar move could not be prepared.'};}
+      });
+      if(preview?.ok!==true)return preview;
+    }
+    return run('reschedule_calendar_event',async()=>{
+      try {
+        const result=await deps.caldav.rescheduleCalDAVEvent(args);
+        const action={type:'calendar.create_event',delivery:'caldav',...result};
+        if(deps.onAction)deps.onAction(action);
+        return {ok:true,rescheduled:true,action};
+      } catch(err) {return {ok:false,error:err.message||'The calendar update could not be confirmed.'};}
+    });
+  }
   if (name === 'create_calendar_event') {
     // Resolve the source before approval so the approved notes are exactly what gets written.
     if (!deps.skipPolicy && args.source_email_uid != null) {
@@ -574,5 +584,6 @@ async function executeAgentTool(name, args, deps) {
 }
 
 module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool, validateImageDataUrl };
+
 
 

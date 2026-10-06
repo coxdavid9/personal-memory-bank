@@ -264,7 +264,7 @@ class CalDAVClient {
   }
 
 
-  async rescheduleCalDAVEvent({title,current_start,start,end}) {
+  async prepareReschedule({title,current_start,start,end}) {
     const oldStart=new Date(current_start),newStart=new Date(start),newEnd=new Date(end);
     if (![oldStart,newStart,newEnd].every(d=>Number.isFinite(d.getTime())) || newEnd<=newStart) throw new Error('Provide valid calendar times with the end after the start.');
     const calendar=await this.discover();
@@ -287,10 +287,20 @@ class CalDAVClient {
     updated=replaceLine(updated,'DTEND',date(newEnd));
     updated=replaceLine(updated,'DTSTAMP',date(new Date()));
     updated=updated.replace(/\r?\n/g,'\r\n');
-    const response=await this.request(target.toString(),{method:'PUT',headers:{'Content-Type':'text/calendar; charset=utf-8','If-Match':source.etag},body:updated});
+    return {target:target.toString(),etag:source.etag,body:updated,result:{uid:event.uid,title:event.title,start:newStart.toISOString(),end:newEnd.toISOString(),calendarName:this.calendarName,rescheduled:true}};
+  }
+
+  async previewReschedule(args) {
+    const prepared=await this.prepareReschedule(args);
+    return {ok:true,title:prepared.result.title,currentStart:args.current_start,start:prepared.result.start,end:prepared.result.end,calendarName:this.calendarName};
+  }
+
+  async rescheduleCalDAVEvent(args) {
+    const prepared=await this.prepareReschedule(args);
+    const response=await this.request(prepared.target,{method:'PUT',headers:{'Content-Type':'text/calendar; charset=utf-8','If-Match':prepared.etag},body:prepared.body});
     if (response.status===412) throw new Error('The event changed before the update. Check it again before retrying.');
     if (!response.ok) throw new Error('The calendar update could not be confirmed. Check the event before retrying.');
-    return {uid:event.uid,title:event.title,start:newStart.toISOString(),end:newEnd.toISOString(),calendarName:this.calendarName,rescheduled:true};
+    return prepared.result;
   }
 
   async createCalDAVEvent(event) {
@@ -337,4 +347,5 @@ function buildCalDAVClientFromEnv(fetchImpl = fetch) {
 }
 
 module.exports = { CalDAVClient, buildCalDAVClientFromEnv, buildVEvent };
+
 
