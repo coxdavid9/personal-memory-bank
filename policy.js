@@ -12,6 +12,7 @@ const DEFAULT_POLICIES = Object.freeze({
   excel_build: TIERS.MONITOR,
   excel_delete: TIERS.ASK,
   create_calendar_event: TIERS.ASK,
+  reschedule_calendar_event: TIERS.ASK,
   get_calendar_events: TIERS.SAFE,
   test_connections: TIERS.SAFE,
   email_list_unread: TIERS.SAFE,
@@ -192,4 +193,5 @@ function cryptoRandomId() {
 }
 
 module.exports = { TIERS, DEFAULT_POLICIES, classifySkill, initPolicyDb, loadWhitelist, summarizeArgs, auditToolCall, requestApproval, getApproval, decideApproval, executeSkill };
+
 
