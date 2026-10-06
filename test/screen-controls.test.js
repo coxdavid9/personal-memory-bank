@@ -32,10 +32,16 @@ test('David measured keyboard-closed state restores top zero and 635px height',(
  assert.equal(values.get('--viewport-top'),'0px');
  assert.equal(values.get('--screen-height'),'635px');
 });
-test('blur clears correction even if Safari leaves the viewport offset stale',()=>{
- const {values,handlers,document}=setup({height:341,offsetTop:294,scale:1},341);
+test('David measured 49ms blur-to-resize transition keeps the frame visible until viewport recovery',()=>{
+ const {values,handlers,document,viewport,window}=setup({height:341,offsetTop:294,scale:1},341);
  document.activeElement={};handlers['document:focusout']();
+ assert.equal(values.get('--viewport-top'),'294px');
+ assert.equal(values.get('--screen-height'),'341px');
+ assert.equal(-294+parseFloat(values.get('--viewport-top')),0);
+ viewport.height=635;viewport.offsetTop=0;window.innerHeight=635;
+ handlers['viewport:resize']();
  assert.equal(values.get('--viewport-top'),'0px');
+ assert.equal(values.get('--screen-height'),'635px');
 });
 test('full height with stale pan does not offset the frame even if input stays focused',()=>{
  const {values}=setup({height:635,offsetTop:294,scale:1});
