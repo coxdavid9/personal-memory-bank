@@ -320,14 +320,14 @@ function inferJob(message = '', hasFiles = false, recent = []) {
   if (/excel|workbook|spreadsheet|\.xlsx|\.csv/.test(text)) return 'excel_analysis';
   // Calendar inspection takes precedence over provider names such as Yahoo.
   // Remove explicit prohibitions before checking whether this is a write request.
-  const intentText = text.replace(/\b(?:do not|don't|never)\s+(?:create|add|put|make|schedule|block)\b[^.!?]*(?:[.!?]|$)/g, '');
+  const intentText = text.replace(/\b(?:do not|don't|never)\s+(?:create|add|put|make|schedule|block|reschedule|move|delete|change)\b[^.!?]*(?:[.!?]|$)/g, '');
+    if (/\b(?:reschedule|move|delete|change)\b[\s\S]{0,160}\b(?:calendar|event|appointment|meeting)\b/.test(intentText) ||
+      (/\b(?:reschedule|move)\b[\s\S]{0,80}\bit\b/.test(intentText) && /calendar|event/.test(String(last?.content||'').toLowerCase()))) return 'calendar';
   const calendarWrite = /\b(?:add|put|create|make|schedule|block)\b[\s\S]{0,160}\b(?:calendar|calender|caledar|caleder)\b/.test(intentText);
   if (!calendarWrite && !/email.*calendar|calendar.*email/.test(text) && (
     /upcoming events|calendar events|what(?:'s| is|s) on (?:my )?(?:(?:work|yahoo|personal) )?calendar|what do i have (?:scheduled|on my calendar)|work calendar/.test(text) ||
     (/\bcalendar\b/.test(text) && /^(?:please\s+)?(?:check|verify|confirm|find|search|look for|list|show)\b/.test(text.trim()))
   )) return 'calendar_read';
-  if (/\b(?:reschedule|move|delete|change)\b[\s\S]{0,160}\b(?:calendar|event|appointment|meeting)\b/.test(text) ||
-      (/\b(?:reschedule|move)\b[\s\S]{0,80}\bit\b/.test(text) && /calendar|event/.test(String(last?.content||'').toLowerCase()))) return 'calendar';
   // A named calendar provider does not turn an explicit calendar write into email work.
   if (/\b(?:add|put|create|make|schedule|block)\b[\s\S]{0,160}\b(?:calendar|calender|caledar|caleder)\b/.test(text)) return 'calendar';
   if (/email|mailbox|yahoo|gmail/.test(text) && /interview|follow.?up|application/.test(text)) return 'communications';
