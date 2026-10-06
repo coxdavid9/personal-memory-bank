@@ -26,7 +26,7 @@ test('delete-and-recreate followup exposes approved rescheduling and live calend
 });
 test('rescheduling requires approval before writing and reports a moved existing event',async()=>{
  let writes=0;
- const deps={pool:{query:async sql=>({rows:sql.includes('INSERT INTO tool_approvals')?[{id:1,expiresAt:new Date(Date.now()+120000)}]:[]})},caldav:{isConfigured:()=>true,rescheduleCalDAVEvent:async()=>{writes++;return {title:args.title,start:args.start,end:args.end,rescheduled:true};}}};
+ const deps={pool:{query:async sql=>({rows:sql.includes('INSERT INTO tool_approvals')?[{id:1,expiresAt:new Date(Date.now()+120000)}]:[]})},caldav:{isConfigured:()=>true,previewReschedule:async()=>({ok:true}),rescheduleCalDAVEvent:async()=>{writes++;return {title:args.title,start:args.start,end:args.end,rescheduled:true};}}};
  const pending=await executeAgentTool('reschedule_calendar_event',args,deps);
  assert.equal(pending.approvalRequired,true);assert.equal(writes,0);
  const actions=[];const result=await executeAgentTool('reschedule_calendar_event',args,{...deps,skipPolicy:true,onAction:a=>actions.push(a)});
@@ -80,3 +80,18 @@ test('named reminder retiming wins over competing title keywords',()=>{
  assert.equal(inferJob('Move my workbook reminder to 2 PM',true),'excel_analysis');
  assert.equal(inferJob('Check my Yahoo calendar. Do not move my reminder to 2 PM.'),'calendar_read');
 });
+
+test('read-only preflight exposes the exact blocker before an impossible approval',async()=>{
+ let approvals=0,puts=0;
+ const client=setup({etag:''}).client;
+ client.fetch=async(_u,o)=>{if(o.method==='PUT')puts++;return new Response(xml(buildVEvent(event),'/cal/old.ics',''),{status:207});};
+ const result=await executeAgentTool('reschedule_calendar_event',args,{pool:{query:async sql=>{if(sql.includes('INSERT INTO tool_approvals'))approvals++;return {rows:[]};}},caldav:client});
+ assert.equal(result.ok,false);assert.match(result.error,/safe version/);assert.equal(approvals,0);assert.equal(puts,0);
+});
+test('successful preflight does not perform any PUT or disclose raw calendar content',async()=>{
+ const s=setup();const preview=await s.client.previewReschedule(args);
+ assert.equal(preview.ok,true);assert.equal(preview.start,'2026-10-06T17:50:00.000Z');
+ assert.equal(s.calls.filter(c=>c.method==='PUT').length,0);
+ assert.ok(!JSON.stringify(preview).includes('BEGIN:VCALENDAR'));
+});
+
