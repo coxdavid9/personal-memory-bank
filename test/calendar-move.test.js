@@ -95,3 +95,29 @@ test('successful preflight does not perform any PUT or disclose raw calendar con
  assert.ok(!JSON.stringify(preview).includes('BEGIN:VCALENDAR'));
 });
 
+test('reschedule restores final CRLF and folds UTF-8 lines without losing notes',async()=>{
+ const notes='Join https://teams.microsoft.com/meet/123 '+ 'é📅'.repeat(80);
+ const s=setup({ics:buildVEvent({...event,notes})});
+ await s.client.rescheduleCalDAVEvent(args);
+ const body=s.calls.find(c=>c.method==='PUT').body;
+ assert.ok(body.endsWith('END:VCALENDAR\r\n'));
+ assert.ok(body.split('\r\n').every(line=>Buffer.byteLength(line,'utf8')<=75));
+ const unfolded=body.replace(/\r\n[ \t]/g,'');
+ assert.ok(unfolded.includes('DESCRIPTION:'+notes+'\r\n'));
+ assert.ok(unfolded.includes('UID:'+event.uid+'\r\n'));
+});
+
+test('rejected PUT reports status and an allowlisted condition without private response text',async()=>{
+ const s=setup(); const fetch=s.client.fetch;
+ const secret='private-calendar-title account-password';
+ s.client.fetch=async(u,o)=>o.method==='PUT'?new Response('<d:error xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><c:valid-calendar-data/><d:responsedescription>'+secret+'</d:responsedescription></d:error>',{status:403}):fetch(u,o);
+ const logs=[]; const original=console.error;console.error=(...values)=>logs.push(values);
+ try {
+  await assert.rejects(s.client.rescheduleCalDAVEvent(args),error=>{
+   assert.match(error.message,/HTTP 403; valid-calendar-data/);
+   assert.ok(!error.message.includes(secret));return true;
+  });
+ } finally {console.error=original;}
+ assert.deepEqual(logs,[['CalDAV reschedule PUT rejected',{status:403,condition:'valid-calendar-data'}]]);
+ assert.equal(s.calls.filter(c=>c.method==='DELETE').length,0);
+});
