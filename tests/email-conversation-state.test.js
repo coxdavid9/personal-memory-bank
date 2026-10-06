@@ -18,6 +18,15 @@ test('welcome and created-account confirmations are not priority actions',()=>{
  const {isActionableEmail}=require('../email');
  for(const subject of ['Welcome To Our Family',"You've successfully created an online account!",'Your online account was created'])assert.equal(isActionableEmail({subject,senderAddress:'service@example.com'}),false,subject);
 });
+test('routine statement-ready subjects are excluded, security and required actions preserved',()=>{
+ const {isActionableEmail}=require('../email');const {buildAttentionCandidates}=require('../attention-engine');
+ for(const subject of ['Your latest bank statement is ready','Your statement is now ready','Your statement is available','Your statement ready']){
+  assert.equal(isActionableEmail({subject}),false,subject);
+  assert.deepEqual(buildAttentionCandidates({email:{yahoo:[{subject}]}}),[]);
+ }
+ assert.equal(isActionableEmail({subject:'Your latest bank statement is ready — action required'}),true);
+ assert.equal(isActionableEmail({subject:'Your latest bank statement is ready',snippet:'Security alert: unauthorized transaction'}),true);
+});
 test('welcome messages with explicit required steps still surface',()=>{
  const {isActionableEmail}=require('../email');
  assert.equal(isActionableEmail({subject:'Welcome to Example — verify your email',senderAddress:'no-reply@example.com'}),true);
