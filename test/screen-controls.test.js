@@ -8,11 +8,11 @@ function setup(viewport = {height:800,offsetTop:0,scale:1}) {
  const properties = new Map(), handlers = {}, observed = [];
  const header={getBoundingClientRect:()=>({height:84})};
  const composer={getBoundingClientRect:()=>({height:96})};
- const window={innerHeight:800,visualViewport:viewport,addEventListener:(name,fn)=>{handlers['window:'+name]=fn;}};
+ const window={requestAnimationFrame:fn=>fn(),innerHeight:800,visualViewport:viewport,addEventListener:(name,fn)=>{handlers['window:'+name]=fn;}};
  if(viewport)viewport.addEventListener=(name,fn)=>{handlers['viewport:'+name]=fn;};
  function ResizeObserver(fn){this.observe=el=>observed.push(el);handlers.observer=fn;}
  window.ResizeObserver=ResizeObserver;
- const document={documentElement:{style:{setProperty:(key,value)=>properties.set(key,value)}},
+ const document={activeElement:{id:'message'},addEventListener:(name,fn)=>{handlers['document:'+name]=fn;},documentElement:{style:{setProperty:(key,value)=>properties.set(key,value)}},
  querySelector:selector=>selector==='.topbar'?header:composer,
  querySelectorAll:()=>[header,composer]};
  const context=vm.createContext({window,document,ResizeObserver});
@@ -20,7 +20,7 @@ function setup(viewport = {height:800,offsetTop:0,scale:1}) {
  const end=html.indexOf('\nload();',start);
  assert.ok(start>=0 && end>start);
  vm.runInContext(html.slice(start,end),context);
- return {properties,handlers,observed,viewport,window};
+ return {properties,handlers,observed,viewport,window,document};
 }
 test('screen controls are outside the filtered Chat and main containers',()=>{
  const mainStart=html.indexOf('<main>'),mainEnd=html.indexOf('</main>');
@@ -62,4 +62,27 @@ test('fallback works without VisualViewport and manual zoom keeps native positio
  const zoom=setup({height:300,offsetTop:50,scale:2});
  assert.equal(zoom.properties.get('--viewport-top'),'0px');
  assert.equal(zoom.properties.get('--keyboard-inset'),'0px');
+});
+
+test('blur clears keyboard offsets even when Safari retains stale viewport geometry',()=>{
+ const {properties,handlers,document}=setup({height:360,offsetTop:120,scale:1});
+ assert.equal(properties.get('--viewport-top'),'120px');
+ document.activeElement={id:''};
+ handlers['document:focusout']();
+ assert.equal(properties.get('--viewport-top'),'0px');
+ assert.equal(properties.get('--keyboard-inset'),'0px');
+ handlers['viewport:scroll']();
+ assert.equal(properties.get('--viewport-top'),'0px');
+});
+test('dismissed keyboard with input still focused ignores stale offsetTop',()=>{
+ const {properties,handlers,viewport}=setup({height:360,offsetTop:120,scale:1});
+ viewport.height=800;
+ handlers['viewport:resize']();
+ assert.equal(properties.get('--viewport-top'),'0px');
+ assert.equal(properties.get('--keyboard-inset'),'0px');
+});
+test('toolbar-sized viewport changes do not move the header even with input focused',()=>{
+ const {properties}=setup({height:740,offsetTop:20,scale:1});
+ assert.equal(properties.get('--viewport-top'),'0px');
+ assert.equal(properties.get('--keyboard-inset'),'0px');
 });
