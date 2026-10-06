@@ -7,7 +7,7 @@ const { inferJob, buildAgentTools } = require('../agent-tools');
 test('router sends calendar requests to calendar skills only', () => {
   assert.equal(inferJob('Put a dentist appointment on my calendar'), 'calendar');
   const names = buildAgentTools({ job: 'calendar' }).map(tool => tool.name);
-  assert.deepEqual(names, ['test_connections','save_memory','get_personal_context','email_search','email_read','create_calendar_event']);
+  assert.deepEqual(names, ['test_connections','save_memory','get_personal_context','get_calendar_events','email_search','email_read','create_calendar_event']);
 });
 
 
@@ -116,3 +116,37 @@ test('mobile composer is viewport-bounded without centered transform drift',()=>
 
 
 test('priority questions use the full attention route instead of job search',()=>{assert.equal(inferJob('What should I be working on right now?'),'attention');assert.equal(inferJob('What do I need to know today?'),'attention');assert.equal(inferJob('not just jobs, everything'),'attention');const names=buildAgentTools({job:'attention'}).map(x=>x.name);for(const name of ['email_search','gmail_search','get_calendar_events','get_job_application_history','get_portfolio_summary','get_workflows'])assert.ok(names.includes(name),name);});
+
+test('Yahoo event verification uses read tools rather than email or calendar writes',()=>{
+ for (const request of [
+  'Check my Yahoo calendar for "Jarvis reminder test" today at 12:07 PM CDT. Report whether it actually exists and its calendar name. Do not create another event.',
+  "What's on my Yahoo calendar today?",
+  'Verify the Robert Half interview exists in my Yahoo calendar',
+  'Search my calendar for Jarvis reminder test. Do not create another calendar event.'
+ ]) {
+  const job=inferJob(request);
+  assert.equal(job,'calendar_read',request);
+  const tools=buildAgentTools({job,enabledCapabilities:['calendar']}).map(t=>t.name);
+  assert.ok(tools.includes('get_calendar_events'));
+  assert.ok(!tools.includes('create_calendar_event'));
+  assert.ok(!tools.includes('email_search'));
+ }
+ assert.equal(inferJob('Check Yahoo for my interview details'),'communications');
+ assert.equal(inferJob('Add the Robert Half interview to my Yahoo calendar'),'calendar');
+ assert.equal(inferJob('Check my Yahoo calendar and add a meeting to my calendar'),'calendar');
+ assert.ok(!buildAgentTools({job:'calendar_read',enabledCapabilities:[]}).some(t=>t.name==='get_calendar_events'));
+});
+
+test('calendar verification reads recent personal events and reports the calendar name without writes',async()=>{
+ const {executeAgentTool}=require('../agent-tools');
+ const result=await executeAgentTool('get_calendar_events',{days:1},{skipPolicy:true,caldav:{
+  isConfigured:()=>true,calendarName:'David Cox',
+  listUpcomingEvents:async options=>{
+   assert.deepEqual(options,{days:1,lookbackHours:24});
+   return [{title:'Jarvis reminder test',start:'2026-10-06T17:07:00Z'}];
+  },
+  createCalDAVEvent:()=>{throw new Error('must not write');}
+ }});
+ assert.equal(result.personalCalendarName,'David Cox');
+ assert.equal(result.personalCalendar[0].title,'Jarvis reminder test');
+});
