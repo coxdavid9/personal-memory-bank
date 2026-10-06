@@ -14,11 +14,12 @@ function setup({ics=buildVEvent(event),href='/cal/old.ics',etag='"v1"',status=20
  return {client,calls};
 }
 test('delete-and-recreate followup exposes approved rescheduling and live calendar reads',()=>{
- for(const text of ['can you delete the 12:07 event and create a new one for 12:50?','Move the event to 12:50','Reschedule the calendar event']){
+ for(const text of ['can you delete the 12:07 event and create a new one for 12:50?','Move the event to 12:50','Reschedule the calendar event','Check my Yahoo calendar and move the event to 12:50']){
   const job=inferJob(text);assert.equal(job,'calendar');
   const names=buildAgentTools({job,enabledCapabilities:['calendar']}).map(t=>t.name);
   assert.ok(names.includes('reschedule_calendar_event'));assert.ok(names.includes('get_calendar_events'));
  }
+ assert.equal(inferJob('Check my Yahoo calendar. Do not move the event.'),'calendar_read');
  assert.equal(inferJob('Move it to 12:50',false,[{role:'assistant',content:'The calendar event is at 12:07.'}]),'calendar');
  assert.ok(!buildAgentTools({job:'calendar',enabledCapabilities:[]}).some(t=>t.name==='reschedule_calendar_event'));
  assert.equal(classifySkill('reschedule_calendar_event',args).tier,'ask');
