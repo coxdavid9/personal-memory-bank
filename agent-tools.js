@@ -100,6 +100,18 @@ const calendarEventTool = {
 
 
 
+
+const rescheduleCalendarTool = {
+ type:'function',name:'reschedule_calendar_event',
+ description:'Move one existing Jarvis-created timed calendar event after approval, preserving its UID, notes, meeting links and alerts. Use instead of deleting and recreating when David only changes its time. Read the calendar first for its exact title and original start; never guess. This changes the calendar only, not separate saved memory reminders. Does not delete events.',
+ strict:true,parameters:{type:'object',properties:{
+  title:{type:'string',description:'Exact existing event title from calendar read.'},
+  current_start:{type:'string',description:'Existing start timestamp with explicit timezone offset.'},
+  start:{type:'string',description:'New start timestamp with explicit timezone offset.'},
+  end:{type:'string',description:'New end timestamp with explicit timezone offset; preserve duration unless David requests otherwise.'}
+ },required:['title','current_start','start','end'],additionalProperties:false}
+};
+
 const jobHistoryTool = {
   type: 'function',
   name: 'get_job_application_history',
@@ -281,7 +293,7 @@ const JOB_SKILLS = Object.freeze({
   excel_analysis: ['save_memory','get_personal_context','get_job_application_history','get_portfolio_summary','excel_summary','excel_query','excel_build','excel_delete','delegate_to_team'],
   job_search: ['save_memory','get_personal_context','get_job_application_history','save_job_application','record_interview','get_workflows','create_calendar_event'],
   portfolio: ['save_memory','get_personal_context','get_portfolio_summary','record_holding','delete_holding'],
-  calendar: ['test_connections','save_memory','get_personal_context','get_calendar_events','email_search','email_read','create_calendar_event'],
+  calendar: ['test_connections','save_memory','get_personal_context','get_calendar_events','email_search','email_read','create_calendar_event','reschedule_calendar_event'],
   engineering: ['save_memory','get_personal_context','delegate_to_team'],
   business: ['save_memory','get_personal_context','delegate_to_team'],
   product: ['save_memory','get_personal_context','delegate_to_team']
@@ -314,6 +326,8 @@ function inferJob(message = '', hasFiles = false, recent = []) {
     /upcoming events|calendar events|what(?:'s| is|s) on (?:my )?(?:(?:work|yahoo|personal) )?calendar|what do i have (?:scheduled|on my calendar)|work calendar/.test(text) ||
     (/\bcalendar\b/.test(text) && /^(?:please\s+)?(?:check|verify|confirm|find|search|look for|list|show)\b/.test(text.trim()))
   )) return 'calendar_read';
+  if (/\b(?:reschedule|move|delete|change)\b[\s\S]{0,160}\b(?:calendar|event|appointment|meeting)\b/.test(text) ||
+      (/\b(?:reschedule|move)\b[\s\S]{0,80}\bit\b/.test(text) && /calendar|event/.test(String(last?.content||'').toLowerCase()))) return 'calendar';
   // A named calendar provider does not turn an explicit calendar write into email work.
   if (/\b(?:add|put|create|make|schedule|block)\b[\s\S]{0,160}\b(?:calendar|calender|caledar|caleder)\b/.test(text)) return 'calendar';
   if (/email|mailbox|yahoo|gmail/.test(text) && /interview|follow.?up|application/.test(text)) return 'communications';
@@ -331,7 +345,7 @@ function inferJob(message = '', hasFiles = false, recent = []) {
 const CAPABILITY_TOOL_MAP = Object.freeze({
   memory: new Set(['save_memory','get_personal_context']),
   'job-search': new Set(['get_job_application_history','save_job_application','record_interview','get_workflows']),
-  calendar: new Set(['create_calendar_event','get_calendar_events']),
+  calendar: new Set(['create_calendar_event','get_calendar_events','reschedule_calendar_event']),
   portfolio: new Set(['get_portfolio_summary','record_holding','delete_holding']),
   'agent-team': new Set(['delegate_to_team']),
   excel: new Set(['excel_summary','excel_query','excel_build','excel_delete']),
@@ -340,7 +354,7 @@ const CAPABILITY_TOOL_MAP = Object.freeze({
 });
 
 function buildAgentTools({ job = 'general', enabledCapabilities = null } = {}) {
-  const all = [connectionTestTool, memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, interviewTool, workflowStatusTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
+  const all = [connectionTestTool, memoryTool, contextTool, calendarEventsTool, yahooUnreadTool, yahooSearchTool, yahooReadTool, gmailUnreadTool, gmailSearchTool, gmailReadTool, calendarEventTool, rescheduleCalendarTool, portfolioSummaryTool, recordHoldingTool, deleteHoldingTool, jobHistoryTool, saveJobApplicationTool, interviewTool, workflowStatusTool, delegateTeamTool, excelSummaryTool, excelQueryTool, excelBuildTool, excelDeleteTool];
   const allowed = new Set(JOB_SKILLS[job] || JOB_SKILLS.general);
   const enabled = enabledCapabilities == null
     ? null
@@ -492,6 +506,15 @@ async function executeAgentTool(name, args, deps) {
   if (name === 'gmail_list_unread') return run('gmail_list_unread', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.listUnread(args.limit)}; });
   if (name === 'gmail_search') return run('gmail_search', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messages:[]}; return {ok:true,connected:true,mailbox:'work Gmail',messages:await deps.emailClients.gmail.search(args)}; });
   if (name === 'gmail_read') return run('gmail_read', async () => { if (!deps.emailClients?.gmail?.isConfigured()) return {ok:true,connected:false,message:'work email not connected',messageData:null}; return {ok:true,connected:true,mailbox:'work Gmail',message:await deps.emailClients.gmail.read(args.uid)}; });
+  if (name === 'reschedule_calendar_event') return run('reschedule_calendar_event',async()=>{
+    if (!deps.caldav?.isConfigured()) return {ok:false,error:'The configured calendar is not connected. No event was moved.'};
+    try {
+      const result=await deps.caldav.rescheduleCalDAVEvent(args);
+      const action={type:'calendar.create_event',delivery:'caldav',...result};
+      if(deps.onAction)deps.onAction(action);
+      return {ok:true,rescheduled:true,action};
+    } catch(err) {return {ok:false,error:err.message||'The calendar update could not be confirmed.'};}
+  });
   if (name === 'create_calendar_event') {
     // Resolve the source before approval so the approved notes are exactly what gets written.
     if (!deps.skipPolicy && args.source_email_uid != null) {
@@ -547,4 +570,5 @@ async function executeAgentTool(name, args, deps) {
 }
 
 module.exports = { JOB_SKILLS, inferJob, buildAgentTools, executeAgentTool, validateImageDataUrl };
+
 
