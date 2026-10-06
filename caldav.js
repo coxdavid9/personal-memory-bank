@@ -201,9 +201,9 @@ class CalDAVClient {
     return this.discoveryPromise;
   }
 
-  async listUpcomingEvents({ days = 2 } = {}) {
+  async listUpcomingEvents({ days = 2, lookbackHours = 0 } = {}) {
     const calendar = await this.discover(); if (!calendar) throw this.discoveryError || new Error('CalDAV is not configured.');
-    const safeDays = Math.min(14, Math.max(1, Number(days) || 2)); const start = new Date(); const end = new Date(start.getTime() + safeDays * 24 * 60 * 60 * 1000);
+    const safeDays = Math.min(14, Math.max(1, Number(days) || 2)); const now = Date.now(); const start = new Date(now - Math.min(24, Math.max(0, Number(lookbackHours) || 0)) * 60 * 60 * 1000); const end = new Date(now + safeDays * 24 * 60 * 60 * 1000);
     const toCalDavUtc = value => { const d = new Date(value); const p=n=>String(n).padStart(2,'0'); return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z'; };
     const body = '<?xml version="1.0" encoding="UTF-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="'+toCalDavUtc(start)+'" end="'+toCalDavUtc(end)+'"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>';
     const r=await this.request(calendar,{method:'REPORT',headers:{Depth:'1','Content-Type':'application/xml; charset=utf-8'},body}); if(!r.ok&&r.status!==207) throw Object.assign(new Error('CalDAV read failed.'), { status:r.status });
