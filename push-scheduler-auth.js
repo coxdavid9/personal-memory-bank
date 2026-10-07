@@ -16,11 +16,19 @@ async function verifySchedulerToken(token) {
     return verifySignedSchedulerToken(token,remoteKeys);
   } catch {return false;}
 }
+function reportRejection(reason) {
+  console.warn('Scheduler authentication rejected:',reason);
+}
 async function verifySignedSchedulerToken(token,keys) {
   try {
     const {jwtVerify}=await import('jose');
     const {payload}=await jwtVerify(token,keys,{issuer:ISSUER,audience:AUDIENCE,algorithms:['RS256'],maxTokenAge:'10m'});
-    return allowedClaims(payload);
-  } catch {return false;}
+    if (!allowedClaims(payload)) {reportRejection('workflow_claims');return false;}
+    return true;
+  } catch (err) {
+    const codes=new Set(['ERR_JWT_EXPIRED','ERR_JWT_CLAIM_VALIDATION_FAILED','ERR_JWS_SIGNATURE_VERIFICATION_FAILED','ERR_JWKS_TIMEOUT','ERR_JWKS_NO_MATCHING_KEY','ERR_JOSE_ALG_NOT_ALLOWED','ERR_JWS_INVALID']);
+    reportRejection(codes.has(err?.code)?err.code:'verification_error');
+    return false;
+  }
 }
 module.exports={verifySchedulerToken,allowedClaims,verifySignedSchedulerToken};
