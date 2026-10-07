@@ -11,10 +11,11 @@ test('only supported HTTPS push providers and valid subscription keys are accept
 test('scheduler verifies signatures, expiration, audience and exact trusted workflow',async()=>{
  const {generateKeyPair,SignJWT}=await import('jose');
  const {publicKey,privateKey}=await generateKeyPair('RS256');
- const claims={repository:'coxdavid9/personal-memory-bank',ref:'refs/heads/main',workflow_ref:'coxdavid9/personal-memory-bank/.github/workflows/reminders.yml@refs/heads/main',event_name:'schedule'};
- const sign=(changes={},aud='jarvis-reminders',expiry='5m')=>new SignJWT({...claims,...changes}).setProtectedHeader({alg:'RS256'}).setIssuer('https://token.actions.githubusercontent.com').setAudience(aud).setSubject('repo:coxdavid9/personal-memory-bank:ref:refs/heads/main').setIssuedAt().setExpirationTime(expiry).sign(privateKey);
+ const claims={repository:'coxdavid9/personal-memory-bank',repository_id:'1349628989',repository_owner_id:'311132298',ref:'refs/heads/main',workflow_ref:'coxdavid9/personal-memory-bank/.github/workflows/reminders.yml@refs/heads/main',event_name:'schedule'};
+ const sign=(changes={},aud='jarvis-reminders',expiry='5m')=>new SignJWT({...claims,...changes}).setProtectedHeader({alg:'RS256'}).setIssuer('https://token.actions.githubusercontent.com').setAudience(aud).setSubject(changes.subject || 'repo:coxdavid9@311132298/personal-memory-bank@1349628989:ref:refs/heads/main').setIssuedAt().setExpirationTime(expiry).sign(privateKey);
  assert.equal(await verifySignedSchedulerToken(await sign(),publicKey),true);
- for(const changes of [{repository:'other/repo'},{ref:'refs/heads/feature'},{event_name:'pull_request'},{workflow_ref:'coxdavid9/personal-memory-bank/.github/workflows/ci.yml@refs/heads/main'}])
+ assert.equal(await verifySignedSchedulerToken(await sign({event_name:'workflow_dispatch'}),publicKey),true);
+ for(const changes of [{repository_id:'999'},{repository_owner_id:'999'},{repository_id:undefined},{repository_owner_id:undefined},{subject:'repo:coxdavid9/personal-memory-bank:ref:refs/heads/main'},{subject:'repo:coxdavid9@999/personal-memory-bank@1349628989:ref:refs/heads/main'},{subject:'repo:coxdavid9@311132298/personal-memory-bank@999:ref:refs/heads/main'},{repository:'other/repo'},{ref:'refs/heads/feature'},{event_name:'pull_request'},{workflow_ref:'coxdavid9/personal-memory-bank/.github/workflows/ci.yml@refs/heads/main'}])
   assert.equal(await verifySignedSchedulerToken(await sign(changes),publicKey),false);
  assert.equal(await verifySignedSchedulerToken(await sign({},'other'),publicKey),false);
  assert.equal(await verifySignedSchedulerToken(await sign({},'jarvis-reminders',-1),publicKey),false);
